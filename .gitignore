@@ -17,3 +17,11 @@ yarn-error.log*
 
 # Dependencies
 node_modules/
+
+# Extension build files
+extension/*.zip
+extension/icons/*.png
+
+# API keys (backup - already in code)
+*.env
+.env*

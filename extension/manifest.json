@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "HumanReplies",
+  "version": "1.0.0",
+  "description": "AI-powered reply generation for social media platforms",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["core/api-service.js", "platforms/x-integration.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "HumanReplies"
+  }
+}

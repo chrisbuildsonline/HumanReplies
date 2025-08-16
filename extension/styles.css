@@ -1,0 +1,379 @@
+/* Styles for HumanReplies Extension */
+
+.humanreplies-reply-btn {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 20px !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.2) !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  white-space: nowrap !important;
+  pointer-events: auto !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  user-select: none !important;
+}
+
+.humanreplies-icon-wrapper {
+  display: inline-block !important;
+  margin-left: 8px !important;
+  pointer-events: auto !important;
+  z-index: 1000 !important;
+}
+
+.humanreplies-reply-btn:hover {
+  transform: translateY(-1px) scale(1.02) !important;
+  box-shadow: 0 4px 16px rgba(44, 62, 80, 0.3) !important;
+}
+
+/* Dark mode gradient for reply button */
+@media (prefers-color-scheme: dark) {
+  .humanreplies-reply-btn {
+    background: linear-gradient(135deg, #1d9bf0 0%, #1a8cd8 50%, #0d7ec7 100%) !important;
+    box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3) !important;
+  }
+  
+  .humanreplies-reply-btn:hover {
+    background: linear-gradient(135deg, #1a8cd8 0%, #0d7ec7 50%, #0a6bb3 100%) !important;
+    box-shadow: 0 4px 16px rgba(29, 155, 240, 0.4) !important;
+  }
+}
+
+.humanreplies-btn {
+  background: linear-gradient(45deg, #1d9bf0, #8b5cf6) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 20px !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  cursor: pointer !important;
+  margin-left: 8px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+.humanreplies-btn:hover {
+  transform: scale(1.02) !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+}
+
+.humanreplies-btn:active {
+  transform: scale(0.98) !important;
+}
+
+.humanreplies-btn:disabled {
+  opacity: 0.7 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+.ai-menu {
+  position: absolute !important;
+  background: white !important;
+  border: 1px solid #e1e8ed !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  padding: 8px !important;
+  z-index: 10000 !important;
+  min-width: 200px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.ai-menu div {
+  padding: 8px 12px !important;
+  cursor: pointer !important;
+  border-radius: 6px !important;
+  transition: background 0.2s !important;
+  font-size: 14px !important;
+  color: #0f1419 !important;
+}
+
+.ai-menu div:hover {
+  background: #f7f9fa !important;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ai-menu {
+    background: #15202b !important;
+    border-color: #38444d !important;
+    color: white !important;
+  }
+  
+  .ai-menu div {
+    color: white !important;
+  }
+  
+  .ai-menu div:hover {
+    background: #1e2732 !important;
+  }
+}
+
+/* Animation for HumanReplies button appearance */
+@keyframes humanrepliesSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.humanreplies-btn {
+  animation: humanrepliesSlideIn 0.3s ease-out !important;
+}
+
+/* Text Selection Toolbar */
+.humanreplies-selection-toolbar-compact {
+  position: absolute !important;
+  background: #2c3e50 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3) !important;
+  padding: 8px 12px !important;
+  z-index: 10000 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+  cursor: default !important;
+}
+
+.humanreplies-selection-toolbar-expanded {
+  position: absolute !important;
+  background: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+  padding: 12px !important;
+  z-index: 10000 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  min-width: 320px !important;
+  max-width: 400px !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+  cursor: default !important;
+}
+
+.humanreplies-selection-toolbar-compact button {
+  background: transparent !important;
+  border: none !important;
+  color: white !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 50% !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.humanreplies-selection-toolbar-compact button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.humanreplies-selection-toolbar-expanded button {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #2c3e50 !important;
+  transition: background 0.2s ease !important;
+  margin-bottom: 2px !important;
+  text-align: left !important;
+}
+
+.humanreplies-selection-toolbar-expanded button:hover {
+  background: #f5f3f0 !important;
+}
+
+.humanreplies-selection-toolbar-expanded button:active {
+  background: #e8e5e1 !important;
+}
+
+/* Tone submenu styles */
+.humanreplies-tone-submenu {
+  position: absolute !important;
+  left: 100% !important;
+  top: 0 !important;
+  background: white !important;
+  border: 1px solid #e1e8ed !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  padding: 4px !important;
+  z-index: 10001 !important;
+  min-width: 140px !important;
+  margin-left: 8px !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+}
+
+.humanreplies-tone-submenu button {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 8px 10px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #2c3e50 !important;
+  transition: background 0.2s ease !important;
+  margin-bottom: 1px !important;
+  text-align: left !important;
+}
+
+.humanreplies-tone-submenu button:hover {
+  background: #f5f3f0 !important;
+}
+
+/* Dark mode support for selection toolbar */
+@media (prefers-color-scheme: dark) {
+  .humanreplies-selection-toolbar-expanded {
+    background: #15202b !important;
+    color: white !important;
+  }
+  
+  .humanreplies-selection-toolbar-expanded button {
+    color: white !important;
+  }
+  
+  .humanreplies-selection-toolbar-expanded button:hover {
+    background: #1e2732 !important;
+  }
+  
+  .humanreplies-selection-toolbar-expanded button:active {
+    background: #253341 !important;
+  }
+  
+  .humanreplies-tone-submenu {
+    background: #15202b !important;
+    border-color: #38444d !important;
+  }
+  
+  .humanreplies-tone-submenu button {
+    color: white !important;
+  }
+  
+  .humanreplies-tone-submenu button:hover {
+    background: #1e2732 !important;
+  }
+}
+
+/* Reply tone menu styles */
+.humanreplies-reply-tone-menu {
+  position: absolute !important;
+  background: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+  padding: 12px !important;
+  z-index: 10000 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  min-width: 200px !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+  opacity: 0 !important;
+  transform: translateY(-10px) scale(0.95) !important;
+  transition: all 0.2s ease !important;
+}
+
+.humanreplies-reply-tone-menu button {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #2c3e50 !important;
+  transition: background 0.2s ease !important;
+  margin-bottom: 2px !important;
+  text-align: left !important;
+}
+
+.humanreplies-reply-tone-menu button:hover {
+  background: #f5f3f0 !important;
+}
+
+.humanreplies-reply-tone-menu select {
+  padding: 4px 8px !important;
+  border: 1px solid #e1e8ed !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  background: white !important;
+  color: #2c3e50 !important;
+  cursor: pointer !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Dark mode support for reply tone menu */
+@media (prefers-color-scheme: dark) {
+  .humanreplies-reply-tone-menu {
+    background: #15202b !important;
+    color: white !important;
+  }
+  
+  .humanreplies-reply-tone-menu button {
+    color: white !important;
+  }
+  
+  .humanreplies-reply-tone-menu button:hover {
+    background: #1e2732 !important;
+  }
+  
+  .humanreplies-reply-tone-menu select {
+    background: #15202b !important;
+    color: white !important;
+    border-color: #38444d !important;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .humanreplies-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+  
+  .humanreplies-selection-toolbar-compact {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+  }
+  
+  .humanreplies-selection-toolbar-expanded {
+    min-width: 280px !important;
+    max-width: 320px !important;
+  }
+  
+  .humanreplies-selection-toolbar-expanded button {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+}

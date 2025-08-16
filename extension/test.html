@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HumanReplies Extension Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 8px 16px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>HumanReplies Extension Test</h1>
+    
+    <div class="test-section">
+        <h3>Extension Status</h3>
+        <p id="extension-status">Checking...</p>
+    </div>
+    
+    <div class="test-section">
+        <h3>API Service Test</h3>
+        <button onclick="testAPI()">Test DeepSeek API</button>
+        <p id="api-result"></p>
+    </div>
+    
+    <div class="test-section">
+        <h3>Mock X Reply Area</h3>
+        <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+            <p><strong>Original Tweet:</strong> "Just launched my new project! Excited to see what everyone thinks."</p>
+            <textarea data-testid="tweetTextarea_0" placeholder="Tweet your reply" style="width: 100%; height: 60px; margin: 10px 0;"></textarea>
+            <div data-testid="toolBar" style="display: flex; align-items: center;">
+                <span>Mock toolbar</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Check if extension is loaded
+        function checkExtensionStatus() {
+            if (typeof HumanRepliesAPI !== 'undefined') {
+                document.getElementById('extension-status').innerHTML = '<span class="success">✅ Extension loaded successfully</span>';
+            } else {
+                document.getElementById('extension-status').innerHTML = '<span class="error">❌ Extension not loaded</span>';
+            }
+        }
+        
+        // Test API functionality
+        async function testAPI() {
+            const resultEl = document.getElementById('api-result');
+            resultEl.innerHTML = 'Testing API...';
+            
+            try {
+                if (typeof HumanRepliesAPI === 'undefined') {
+                    throw new Error('HumanRepliesAPI not available');
+                }
+                
+                const api = new HumanRepliesAPI();
+                const result = await api.generateReply('Just launched my new project! Excited to see what everyone thinks.', {
+                    platform: 'test',
+                    tone: 'supportive'
+                });
+                
+                resultEl.innerHTML = `<span class="success">✅ API Test Successful</span><br><strong>Generated Reply:</strong> "${result.reply}"`;
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">❌ API Test Failed: ${error.message}</span>`;
+            }
+        }
+        
+        // Initialize
+        setTimeout(checkExtensionStatus, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HumanReplies Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f3f0; }
+        .debug-panel { background: white; padding: 20px; border-radius: 10px; margin: 10px 0; }
+        .log { background: #f8f9fa; padding: 10px; border-radius: 5px; margin: 5px 0; font-family: monospace; }
+        button { background: #2c3e50; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin: 5px; cursor: pointer; }
+        button:hover { background: #34495e; }
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .info { color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>HumanReplies Debug Panel</h1>
+    
+    <div class="debug-panel">
+        <h3>Extension Status</h3>
+        <div id="extension-status">Checking...</div>
+        <button onclick="checkExtension()">Refresh Status</button>
+    </div>
+    
+    <div class="debug-panel">
+        <h3>X Integration Test</h3>
+        <button onclick="testXIntegration()">Test X Integration</button>
+        <button onclick="findTextareas()">Find Textareas</button>
+        <button onclick="findTweets()">Find Tweets</button>
+        <div id="x-test-results"></div>
+    </div>
+    
+    <div class="debug-panel">
+        <h3>API Test</h3>
+        <button onclick="testAPI()">Test DeepSeek API</button>
+        <div id="api-results"></div>
+    </div>
+    
+    <div class="debug-panel">
+        <h3>Console Logs</h3>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="console-logs"></div>
+    </div>
+    
+    <script>
+        let logs = [];
+        
+        // Override console.log to capture logs
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            if (args[0] && args[0].includes && args[0].includes('🧠 HumanReplies')) {
+                logs.push(args.join(' '));
+                updateLogDisplay();
+            }
+        };
+        
+        function updateLogDisplay() {
+            const logDiv = document.getElementById('console-logs');
+            logDiv.innerHTML = logs.slice(-10).map(log => 
+                `<div class="log">${log}</div>`
+            ).join('');
+        }
+        
+        function clearLogs() {
+            logs = [];
+            updateLogDisplay();
+        }
+        
+        function checkExtension() {
+            const statusDiv = document.getElementById('extension-status');
+            
+            if (typeof HumanRepliesAPI !== 'undefined') {
+                statusDiv.innerHTML = '<span class="success">✅ HumanRepliesAPI loaded</span>';
+            } else {
+                statusDiv.innerHTML = '<span class="error">❌ HumanRepliesAPI not found</span>';
+            }
+            
+            if (typeof XIntegration !== 'undefined') {
+                statusDiv.innerHTML += '<br><span class="success">✅ XIntegration loaded</span>';
+            } else {
+                statusDiv.innerHTML += '<br><span class="error">❌ XIntegration not found</span>';
+            }
+        }
+        
+        function testXIntegration() {
+            const resultsDiv = document.getElementById('x-test-results');
+            resultsDiv.innerHTML = '<div class="info">Testing X integration...</div>';
+            
+            // Simulate X integration test
+            setTimeout(() => {
+                if (typeof XIntegration !== 'undefined') {
+                    resultsDiv.innerHTML = '<div class="success">✅ X Integration available</div>';
+                    
+                    // Try to create an instance
+                    try {
+                        const integration = new XIntegration();
+                        resultsDiv.innerHTML += '<div class="success">✅ X Integration instance created</div>';
+                    } catch (error) {
+                        resultsDiv.innerHTML += `<div class="error">❌ Error creating instance: ${error.message}</div>`;
+                    }
+                } else {
+                    resultsDiv.innerHTML = '<div class="error">❌ X Integration not available</div>';
+                }
+            }, 1000);
+        }
+        
+        function findTextareas() {
+            const resultsDiv = document.getElementById('x-test-results');
+            
+            const selectors = [
+                '[data-testid="tweetTextarea_0"]',
+                '[contenteditable="true"]',
+                'textarea',
+                '[role="textbox"]'
+            ];
+            
+            let results = '<div class="info">Searching for textareas...</div>';
+            
+            selectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                results += `<div class="log">${selector}: ${elements.length} found</div>`;
+            });
+            
+            resultsDiv.innerHTML = results;
+        }
+        
+        function findTweets() {
+            const resultsDiv = document.getElementById('x-test-results');
+            
+            const selectors = [
+                '[data-testid="tweetText"]',
+                'article',
+                '[role="article"]'
+            ];
+            
+            let results = '<div class="info">Searching for tweets...</div>';
+            
+            selectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                results += `<div class="log">${selector}: ${elements.length} found</div>`;
+                
+                if (elements.length > 0) {
+                    const firstText = elements[0].textContent?.substring(0, 50) || 'No text';
+                    results += `<div class="log">First text: "${firstText}..."</div>`;
+                }
+            });
+            
+            resultsDiv.innerHTML = results;
+        }
+        
+        async function testAPI() {
+            const resultsDiv = document.getElementById('api-results');
+            resultsDiv.innerHTML = '<div class="info">Testing API...</div>';
+            
+            try {
+                if (typeof HumanRepliesAPI === 'undefined') {
+                    throw new Error('HumanRepliesAPI not available');
+                }
+                
+                const api = new HumanRepliesAPI();
+                const result = await api.generateReply('This is a test tweet for debugging purposes.', {
+                    platform: 'debug',
+                    tone: 'helpful'
+                });
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">✅ API Test Successful</div>
+                    <div class="log">Reply: "${result.reply}"</div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ API Test Failed: ${error.message}</div>`;
+            }
+        }
+        
+        // Initialize
+        setTimeout(checkExtension, 500);
+        setInterval(updateLogDisplay, 2000); // Update logs every 2 seconds
+    </script>
+</body>
+</html>
