@@ -2,9 +2,9 @@
 
 class HumanRepliesAPI {
   constructor() {
-    this.baseURL = 'https://api.humanreplies.com/v1'; // Future SaaS endpoint
+    this.baseURL = "https://api.humanreplies.com/v1"; // Future SaaS endpoint
     this.fallbackMode = true; // Use Pollinations.ai directly for now
-    this.pollinationsURL = 'https://text.pollinations.ai';
+    this.pollinationsURL = "https://text.pollinations.ai";
   }
 
   async generateReply(context, options = {}) {
@@ -19,22 +19,24 @@ class HumanRepliesAPI {
     // Future implementation for SaaS service
     try {
       const response = await fetch(`${this.baseURL}/generate-reply`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await this.getUserToken()}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await this.getUserToken()}`,
         },
         body: JSON.stringify({
           context: context,
-          platform: options.platform || 'x',
-          tone: options.tone || 'helpful',
-          length: options.length || 'medium'
-        })
+          platform: options.platform || "x",
+          tone: options.tone || "helpful",
+          length: options.length || "medium",
+        }),
       });
 
       if (!response.ok) {
         if (response.status === 429) {
-          throw new Error('Daily limit reached. Upgrade for unlimited replies.');
+          throw new Error(
+            "Daily limit reached. Upgrade for unlimited replies."
+          );
         }
         throw new Error(`Service unavailable: ${response.status}`);
       }
@@ -43,10 +45,10 @@ class HumanRepliesAPI {
       return {
         reply: data.reply,
         remainingReplies: data.remainingReplies,
-        isLimitReached: data.remainingReplies <= 0
+        isLimitReached: data.remainingReplies <= 0,
       };
     } catch (error) {
-      console.error('SaaS API error:', error);
+      console.error("SaaS API error:", error);
       throw error;
     }
   }
@@ -54,14 +56,14 @@ class HumanRepliesAPI {
   async generateWithPollinations(context, options) {
     try {
       const prompt = this.buildPrompt(context, options);
-      
+
       // Pollinations.ai uses a simple GET request with the prompt as a parameter
       const encodedPrompt = encodeURIComponent(prompt);
       const response = await fetch(`${this.pollinationsURL}/${encodedPrompt}`, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Accept': 'text/plain',
-        }
+          Accept: "text/plain",
+        },
       });
 
       if (!response.ok) {
@@ -69,51 +71,78 @@ class HumanRepliesAPI {
       }
 
       const reply = await response.text();
-      
+
       // Clean up the response - remove any extra quotes or newlines
-      const cleanReply = reply.trim().replace(/^["']|["']$/g, '');
-      
+      const cleanReply = reply.trim().replace(/^["']|["']$/g, "");
+
       return {
         reply: cleanReply,
         remainingReplies: null, // Free service - unlimited
-        isLimitReached: false
+        isLimitReached: false,
       };
     } catch (error) {
-      console.error('Pollinations API error:', error);
+      console.error("Pollinations API error:", error);
       throw error;
     }
   }
 
-  buildPrompt(context, options) {
-    const tone = options.tone || 'helpful';
-    const platform = options.platform || 'social media';
-    
-    // Simplified prompt for Pollinations.ai - more direct and concise
-    let toneInstruction = '';
-    switch(tone) {
-      case 'joke':
-        toneInstruction = 'Write a funny, humorous response';
+  buildPrompt(context, options = {}) {
+    const {
+      tone = "helpful",
+      platform = "social media",
+      userWritingStyle = "",
+    } = options;
+
+    const p = String(platform).toLowerCase();
+    const isTwitter = p === "twitter" || p === "x";
+
+    const platformInstructions = isTwitter
+      ? "Limit to under 200 characters. Avoid hashtags and unnecessary @mentions. Use newlines \r\n if suitable."
+      : "Keep it concise and skimmable.";
+
+    let toneInstruction = "Write a helpful, balanced response";
+    switch (tone) {
+      case "joke":
+        toneInstruction = "Write a funny, good-natured response";
         break;
-      case 'support':
-        toneInstruction = 'Write a supportive, encouraging response';
+      case "support":
+        toneInstruction = "Write a supportive, encouraging response";
         break;
-      case 'idea':
-        toneInstruction = 'Suggest an innovative idea or creative suggestion';
+      case "idea":
+        toneInstruction = "Suggest an innovative, practical idea";
         break;
-      case 'question':
-        toneInstruction = 'Ask a thoughtful question to encourage discussion';
+      case "question":
+        toneInstruction = "Ask a thoughtful, conversation-starting question";
         break;
-      default:
-        toneInstruction = 'Write a helpful, balanced response';
     }
-    
-    return `${toneInstruction} to this ${platform} post: "${context}". Keep it under 280 characters, conversational, and human-like.`;
+
+    const noDashRule =
+      "Do not use em dashes (—) or en dashes (–). Use commas, periods, or semicolons instead. " +
+      "Before returning, scan the text and replace any em/en dash with a comma or period.";
+
+    const style = userWritingStyle
+      ? `Adopt this writing style: ${userWritingStyle}`
+      : "";
+
+    const prompt = [
+      style,
+      `${toneInstruction} to this ${
+        isTwitter ? "X (Twitter)" : p
+      } post: "${context}".`,
+      `${platformInstructions} Keep it conversational and human-like.`,
+      "Be respectful. No emojis unless present in the original.",
+      noDashRule,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return prompt.trim();
   }
 
   async getUserToken() {
     // Future implementation - get user auth token
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['userToken'], (result) => {
+      chrome.storage.sync.get(["userToken"], (result) => {
         resolve(result.userToken || null);
       });
     });
@@ -124,28 +153,28 @@ class HumanRepliesAPI {
     if (this.fallbackMode) {
       return { remainingReplies: null, isLimitReached: false };
     }
-    
+
     try {
       const response = await fetch(`${this.baseURL}/user/limits`, {
         headers: {
-          'Authorization': `Bearer ${await this.getUserToken()}`
-        }
+          Authorization: `Bearer ${await this.getUserToken()}`,
+        },
       });
-      
+
       const data = await response.json();
       return {
         remainingReplies: data.remainingReplies,
-        isLimitReached: data.remainingReplies <= 0
+        isLimitReached: data.remainingReplies <= 0,
       };
     } catch (error) {
-      console.error('Failed to check limits:', error);
+      console.error("Failed to check limits:", error);
       return { remainingReplies: 0, isLimitReached: true };
     }
   }
 }
 
 // Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = HumanRepliesAPI;
 } else {
   window.HumanRepliesAPI = HumanRepliesAPI;

@@ -3,15 +3,47 @@
   "name": "HumanReplies",
   "version": "1.0.0",
   "description": "AI-powered reply generation for social media platforms",
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://x.com/*", "https://twitter.com/*"],
-      "js": ["core/api-service.js", "platforms/x-integration.js"],
-      "css": ["styles.css"]
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "core/api-service.js",
+        "platforms/x-integration.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "core/api-service.js",
+        "platforms/linkedin-integration.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
     }
   ],
+  "icons": {
+    "16": "avatar.png",
+    "32": "avatar.png",
+    "48": "avatar.png",
+    "128": "avatar.png"
+  },
   "background": {
     "service_worker": "background.js"
   },
