@@ -12,8 +12,10 @@ class XIntegration {
           mutation.addedNodes.forEach((node) => {
             if (
               node.nodeType === 1 &&
-              (node.querySelector && node.querySelector('[data-testid="tweetTextarea_0"]') ||
-                node.matches && node.matches('[data-testid="tweetTextarea_0"]'))
+              ((node.querySelector &&
+                node.querySelector('[data-testid="tweetTextarea_0"]')) ||
+                (node.matches &&
+                  node.matches('[data-testid="tweetTextarea_0"]')))
             ) {
               shouldUpdate = true;
             }
@@ -130,7 +132,9 @@ class XIntegration {
     const toolbars = document.querySelectorAll(
       '[data-testid="toolBar"] nav[role="navigation"]'
     );
-    this.log(`Found ${toolbars.length} total toolbars, filtering for replies...`);
+    this.log(
+      `Found ${toolbars.length} total toolbars, filtering for replies...`
+    );
 
     toolbars.forEach((toolbar, index) => {
       try {
@@ -146,7 +150,9 @@ class XIntegration {
           return;
         }
 
-        this.log(`Toolbar ${index + 1}: Adding AI Reply button to REPLY toolbar`);
+        this.log(
+          `Toolbar ${index + 1}: Adding AI Reply button to REPLY toolbar`
+        );
 
         // Create our button wrapper
         const wrapper = document.createElement("div");
@@ -173,41 +179,48 @@ class XIntegration {
       // Method 1: Look for reply-specific elements in the surrounding DOM
       let parent = toolbar.parentElement;
       let depth = 0;
-      
+
       while (parent && depth < 10) {
         try {
           // Look for reply indicators
-          if (parent.querySelector('[data-testid*="reply"]') ||
-              parent.querySelector('[aria-label*="reply"]') ||
-              parent.querySelector('[aria-label*="Reply"]')) {
+          if (
+            parent.querySelector('[data-testid*="reply"]') ||
+            parent.querySelector('[aria-label*="reply"]') ||
+            parent.querySelector('[aria-label*="Reply"]')
+          ) {
             this.log("Found reply indicator in parent elements");
             return true;
           }
-          
+
           // Look for tweet content above (indicates this is a reply to something)
-          if (parent.querySelector('[data-testid="tweetText"]') ||
-              parent.querySelector('article[data-testid="tweet"]')) {
+          if (
+            parent.querySelector('[data-testid="tweetText"]') ||
+            parent.querySelector('article[data-testid="tweet"]')
+          ) {
             this.log("Found tweet content above - this is likely a reply");
             return true;
           }
         } catch (e) {
           // Continue if selector fails
         }
-        
+
         parent = parent.parentElement;
         depth++;
       }
-      
+
       // Method 2: Check if the associated textarea has reply-specific attributes
       try {
-        const nearbyTextarea = toolbar.closest('[data-testid="tweetTextarea_0"]') ||
-                              document.querySelector('[data-testid="tweetTextarea_0"]');
-        
+        const nearbyTextarea =
+          toolbar.closest('[data-testid="tweetTextarea_0"]') ||
+          document.querySelector('[data-testid="tweetTextarea_0"]');
+
         if (nearbyTextarea) {
-          const placeholder = nearbyTextarea.getAttribute('aria-label') || 
-                             nearbyTextarea.getAttribute('placeholder') || '';
-          
-          if (placeholder.toLowerCase().includes('reply')) {
+          const placeholder =
+            nearbyTextarea.getAttribute("aria-label") ||
+            nearbyTextarea.getAttribute("placeholder") ||
+            "";
+
+          if (placeholder.toLowerCase().includes("reply")) {
             this.log("Found reply in textarea placeholder/label");
             return true;
           }
@@ -215,23 +228,30 @@ class XIntegration {
       } catch (e) {
         this.log("Method 2 failed, continuing...");
       }
-      
+
       // Method 3: Check URL for reply context
       try {
-        if (window.location.href.includes('/status/') && 
-            window.location.href.includes('reply')) {
+        if (
+          window.location.href.includes("/status/") &&
+          window.location.href.includes("reply")
+        ) {
           this.log("URL indicates reply context");
           return true;
         }
       } catch (e) {
         // Continue if URL check fails
       }
-      
+
       // Method 4: Look for "Replying to" text using text content search
       try {
-        const replyToElements = document.querySelectorAll('[data-testid="reply-to"], span, div');
+        const replyToElements = document.querySelectorAll(
+          '[data-testid="reply-to"], span, div'
+        );
         for (const element of replyToElements) {
-          if (element.textContent && element.textContent.includes('Replying to')) {
+          if (
+            element.textContent &&
+            element.textContent.includes("Replying to")
+          ) {
             this.log("Found 'Replying to' text indicator");
             return true;
           }
@@ -239,35 +259,43 @@ class XIntegration {
       } catch (e) {
         this.log("Method 4 failed, continuing...");
       }
-      
+
       // Method 5: Check for Draft.js placeholder that says "Post your reply"
       try {
-        const placeholders = document.querySelectorAll('.public-DraftEditorPlaceholder-inner');
+        const placeholders = document.querySelectorAll(
+          ".public-DraftEditorPlaceholder-inner"
+        );
         for (const placeholder of placeholders) {
-          if (placeholder.textContent && placeholder.textContent.includes('Post your reply')) {
-            this.log("Found 'Post your reply' placeholder - this is a reply interface");
+          if (
+            placeholder.textContent &&
+            placeholder.textContent.includes("Post your reply")
+          ) {
+            this.log(
+              "Found 'Post your reply' placeholder - this is a reply interface"
+            );
             return true;
           }
         }
       } catch (e) {
         this.log("Method 5 failed, continuing...");
       }
-      
+
       // Method 6: Simple check - if we're on a tweet status page, assume it's a reply context
       try {
-        if (window.location.pathname.includes('/status/')) {
+        if (window.location.pathname.includes("/status/")) {
           this.log("On tweet status page - likely a reply context");
           return true;
         }
       } catch (e) {
         // Continue
       }
-      
     } catch (error) {
       this.log(`Error in isReplyToolbar: ${error.message}`);
     }
-    
-    this.log("No reply indicators found - this appears to be a new post toolbar");
+
+    this.log(
+      "No reply indicators found - this appears to be a new post toolbar"
+    );
     return false;
   }
 
@@ -581,8 +609,10 @@ class XIntegration {
 
       // Enforce 280 character limit
       const processedReply = this.enforceCharacterLimit(result.reply, 280);
-      this.log(`Generated reply (${processedReply.length} chars): "${processedReply}"`);
-      
+      this.log(
+        `Generated reply (${processedReply.length} chars): "${processedReply}"`
+      );
+
       this.insertReply(textarea, processedReply);
       this.showSuccessState(button, result.remainingReplies);
     } catch (error) {
@@ -615,19 +645,21 @@ class XIntegration {
     if (text.length <= maxLength) {
       return text;
     }
-    
-    this.log(`Reply too long (${text.length} chars), truncating to ${maxLength}...`);
-    
+
+    this.log(
+      `Reply too long (${text.length} chars), truncating to ${maxLength}...`
+    );
+
     // Try to truncate at a word boundary
     const truncated = text.substring(0, maxLength);
-    const lastSpaceIndex = truncated.lastIndexOf(' ');
-    
+    const lastSpaceIndex = truncated.lastIndexOf(" ");
+
     if (lastSpaceIndex > maxLength * 0.8) {
       // If we can find a space in the last 20% of the text, use that
-      return truncated.substring(0, lastSpaceIndex).trim() + '...';
+      return truncated.substring(0, lastSpaceIndex).trim() + "...";
     } else {
       // Otherwise, hard truncate and add ellipsis
-      return truncated.substring(0, maxLength - 3).trim() + '...';
+      return truncated.substring(0, maxLength - 3).trim() + "...";
     }
   }
 
@@ -741,49 +773,54 @@ class XIntegration {
         // Twitter Draft.js editor - focus first and simulate typing
         this.log("Focusing textarea before text insertion");
         textarea.focus();
-        
+
         // Wait a moment for Draft.js to initialize, then try insertion methods
         setTimeout(() => {
           let success = false;
-          
+
           // Method 1: Simulate paste operation (most reliable for Draft.js)
           try {
             textarea.focus();
             this.log("Textarea focused, attempting paste simulation");
-            
+
             // Clear existing content first
             this.clearTextareaContent(textarea);
-            
+
             // Create a paste event with clipboard data
-            const pasteEvent = new ClipboardEvent('paste', {
+            const pasteEvent = new ClipboardEvent("paste", {
               clipboardData: new DataTransfer(),
               bubbles: true,
-              cancelable: true
+              cancelable: true,
             });
-            
+
             // Add the reply text to clipboard data
-            pasteEvent.clipboardData.setData('text/plain', reply);
-            
+            pasteEvent.clipboardData.setData("text/plain", reply);
+
             // Dispatch the paste event
             const pasteSuccess = textarea.dispatchEvent(pasteEvent);
             this.log(`Paste event dispatched, success: ${pasteSuccess}`);
-            
+
             // Check if text was actually inserted
             setTimeout(() => {
-              const currentContent = textarea.textContent || textarea.innerText || '';
-              this.log(`Current textarea content after paste: "${currentContent}"`);
-              if (currentContent.includes(reply) || currentContent.trim() === reply.trim()) {
+              const currentContent =
+                textarea.textContent || textarea.innerText || "";
+              this.log(
+                `Current textarea content after paste: "${currentContent}"`
+              );
+              if (
+                currentContent.includes(reply) ||
+                currentContent.trim() === reply.trim()
+              ) {
                 this.log("Paste method successful - text is visible");
                 success = true;
               } else {
                 this.log("Paste method failed - text not visible in textarea");
               }
             }, 50);
-            
           } catch (error) {
             this.log(`Paste simulation failed: ${error.message}`);
           }
-          
+
           // Method 1b: Fallback to execCommand if keyboard simulation fails
           if (!success) {
             try {
@@ -793,39 +830,45 @@ class XIntegration {
               range.collapse(false);
               selection.removeAllRanges();
               selection.addRange(range);
-              
+
               // Clear existing content first
-              document.execCommand('selectAll');
-              document.execCommand('delete');
-              
+              document.execCommand("selectAll");
+              document.execCommand("delete");
+
               // Insert the reply text
-              document.execCommand('insertText', false, reply);
+              document.execCommand("insertText", false, reply);
               success = true;
               this.log("Used execCommand method successfully");
             } catch (error) {
               this.log(`execCommand failed: ${error.message}`);
             }
           }
-          
+
           // Method 2: Directly manipulate Draft.js DOM structure
           if (!success) {
             this.log("Attempting direct Draft.js DOM manipulation");
-            
+
             // Clear existing content first
             this.clearTextareaContent(textarea);
-            
+
             // Look for the exact structure we saw in the HTML
-            const contentsDiv = textarea.querySelector('div[data-contents="true"]');
+            const contentsDiv = textarea.querySelector(
+              'div[data-contents="true"]'
+            );
             if (contentsDiv) {
               this.log("Found data-contents div, rebuilding structure");
-              
+
               // Get the editor ID from existing structure
-              const editorId = textarea.getAttribute('aria-describedby') || 'editor';
-              const offsetKey = `${editorId.replace('placeholder-', '')}-0-0`;
-              
+              const editorId =
+                textarea.getAttribute("aria-describedby") || "editor";
+              const offsetKey = `${editorId.replace("placeholder-", "")}-0-0`;
+
               // Create new block structure with text
               const newBlock = `
-                <div class="" data-block="true" data-editor="${editorId.replace('placeholder-', '')}" data-offset-key="${offsetKey}">
+                <div class="" data-block="true" data-editor="${editorId.replace(
+                  "placeholder-",
+                  ""
+                )}" data-offset-key="${offsetKey}">
                   <div data-offset-key="${offsetKey}" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr">
                     <span data-offset-key="${offsetKey}">
                       <span data-text="true">${reply}</span>
@@ -833,24 +876,28 @@ class XIntegration {
                   </div>
                 </div>
               `;
-              
+
               // Replace the contents
               contentsDiv.innerHTML = newBlock;
               this.log("Rebuilt Draft.js structure with reply text");
               success = true;
-              
+
               // Verify the text is there
               setTimeout(() => {
-                const textSpan = textarea.querySelector('span[data-text="true"]');
+                const textSpan = textarea.querySelector(
+                  'span[data-text="true"]'
+                );
                 if (textSpan && textSpan.textContent === reply) {
-                  this.log("Verification: Text successfully inserted and visible");
+                  this.log(
+                    "Verification: Text successfully inserted and visible"
+                  );
                 } else {
                   this.log("Verification: Text insertion may have failed");
                 }
               }, 100);
             }
           }
-          
+
           // Method 3: Direct content replacement as fallback
           if (!success) {
             this.log("Using direct content replacement fallback");
@@ -863,10 +910,20 @@ class XIntegration {
           }
 
           // Trigger comprehensive events to notify Draft.js of changes
-          const events = ["input", "change", "keyup", "keydown", "beforeinput", "textInput"];
+          const events = [
+            "input",
+            "change",
+            "keyup",
+            "keydown",
+            "beforeinput",
+            "textInput",
+          ];
           events.forEach((eventType) => {
             try {
-              const event = new Event(eventType, { bubbles: true, cancelable: true });
+              const event = new Event(eventType, {
+                bubbles: true,
+                cancelable: true,
+              });
               textarea.dispatchEvent(event);
             } catch (e) {
               this.log(`Event ${eventType} failed: ${e.message}`);
@@ -875,10 +932,11 @@ class XIntegration {
 
           // Try React events
           try {
-            const reactProps = Object.keys(textarea).find((key) =>
-              key.startsWith("__reactProps") || 
-              key.startsWith("__reactInternalInstance") ||
-              key.startsWith("__reactFiber")
+            const reactProps = Object.keys(textarea).find(
+              (key) =>
+                key.startsWith("__reactProps") ||
+                key.startsWith("__reactInternalInstance") ||
+                key.startsWith("__reactFiber")
             );
             if (reactProps && textarea[reactProps]?.onChange) {
               textarea[reactProps].onChange({ target: { value: reply } });
@@ -886,7 +944,7 @@ class XIntegration {
           } catch (e) {
             this.log(`React event failed: ${e.message}`);
           }
-          
+
           this.log(`Draft.js text insertion success: ${success}`);
         }, 100); // Small delay to let Draft.js initialize
       }
@@ -900,35 +958,38 @@ class XIntegration {
 
   clearTextareaContent(textarea) {
     this.log("Clearing existing textarea content");
-    
+
     try {
       // For standard textarea
       if (textarea.tagName === "TEXTAREA") {
         textarea.value = "";
         return;
       }
-      
+
       // For Draft.js editor - try multiple clearing methods
-      
+
       // Method 1: Clear via execCommand (most compatible)
       try {
         textarea.focus();
-        document.execCommand('selectAll');
-        document.execCommand('delete');
+        document.execCommand("selectAll");
+        document.execCommand("delete");
         this.log("Cleared content using execCommand");
       } catch (error) {
         this.log(`execCommand clear failed: ${error.message}`);
       }
-      
+
       // Method 2: Clear Draft.js DOM structure
       const contentsDiv = textarea.querySelector('div[data-contents="true"]');
       if (contentsDiv) {
         // Create empty block structure
-        const editorId = textarea.getAttribute('aria-describedby') || 'editor';
-        const offsetKey = `${editorId.replace('placeholder-', '')}-0-0`;
-        
+        const editorId = textarea.getAttribute("aria-describedby") || "editor";
+        const offsetKey = `${editorId.replace("placeholder-", "")}-0-0`;
+
         const emptyBlock = `
-          <div class="" data-block="true" data-editor="${editorId.replace('placeholder-', '')}" data-offset-key="${offsetKey}">
+          <div class="" data-block="true" data-editor="${editorId.replace(
+            "placeholder-",
+            ""
+          )}" data-offset-key="${offsetKey}">
             <div data-offset-key="${offsetKey}" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr">
               <span data-offset-key="${offsetKey}">
                 <span data-text="true"></span>
@@ -936,15 +997,15 @@ class XIntegration {
             </div>
           </div>
         `;
-        
+
         contentsDiv.innerHTML = emptyBlock;
         this.log("Cleared content using Draft.js DOM manipulation");
       }
-      
+
       // Method 3: Fallback - clear textContent
       textarea.textContent = "";
       textarea.innerText = "";
-      
+
       // Trigger events to notify Draft.js of the change
       const events = ["input", "change", "keyup"];
       events.forEach((eventType) => {
@@ -954,7 +1015,6 @@ class XIntegration {
           // Ignore event errors
         }
       });
-      
     } catch (error) {
       this.log(`Error clearing textarea content: ${error.message}`);
     }
@@ -997,7 +1057,7 @@ class XIntegration {
     button.style.opacity = "1";
     button.title = message;
     button.classList.remove("loading");
-    
+
     // Reset after 3 seconds
     setTimeout(() => {
       button.innerHTML = "";
@@ -1716,12 +1776,18 @@ class XIntegration {
     try {
       // Check if user has saved a preferred tone
       const savedTone = await this.getSavedReplyTone();
-      this.log(`Saved tone preference: "${savedTone}" (type: ${typeof savedTone})`);
-      
+      this.log(
+        `Saved tone preference: "${savedTone}" (type: ${typeof savedTone})`
+      );
+
       // Debug the exact comparison
       const shouldAutoGenerate = savedTone && savedTone !== "ask";
-      this.log(`shouldAutoGenerate: ${shouldAutoGenerate} (savedTone !== "ask": ${savedTone !== "ask"})`);
-      
+      this.log(
+        `shouldAutoGenerate: ${shouldAutoGenerate} (savedTone !== "ask": ${
+          savedTone !== "ask"
+        })`
+      );
+
       if (shouldAutoGenerate) {
         // Auto-generate with saved tone - skip menu
         this.log(`Auto-generating reply with saved tone: ${savedTone}`);
@@ -2014,14 +2080,20 @@ class XIntegration {
     try {
       // Get current value
       const currentValue = await this.getSavedReplyTone();
-      this.log(`DEBUG - Current stored value: "${currentValue}" (type: ${typeof currentValue})`);
-      
+      this.log(
+        `DEBUG - Current stored value: "${currentValue}" (type: ${typeof currentValue})`
+      );
+
       // Get raw storage value
-      chrome.storage.sync.get(['replyTone'], (result) => {
+      chrome.storage.sync.get(["replyTone"], (result) => {
         this.log(`DEBUG - Raw storage result:`, result);
-        this.log(`DEBUG - Raw replyTone value: "${result.replyTone}" (type: ${typeof result.replyTone})`);
+        this.log(
+          `DEBUG - Raw replyTone value: "${
+            result.replyTone
+          }" (type: ${typeof result.replyTone})`
+        );
       });
-      
+
       return currentValue;
     } catch (error) {
       this.log(`DEBUG - Error reading storage: ${error.message}`);

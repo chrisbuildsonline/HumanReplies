@@ -213,6 +213,7 @@
       }
     }
   </style>
+  <script src="popup.js"></script>
 </head>
 
 <body>
@@ -259,9 +260,6 @@
         <option value="idea">💡 Idea</option>
         <option value="question">❓ Question</option>
       </select>
-      <button class="debug-storage-btn"
-        style="margin-top: 8px; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: #f0f0f0; font-size: 11px; cursor: pointer;">Debug
-        Storage</button>
     </div>
   </div>
 
@@ -284,48 +282,6 @@
   <div class="footer">
     <p>Currently supports X (Twitter)</p>
   </div>
-
-  <script>
-    alert('Script is running!');
-    console.log('HumanReplies popup script started');
-
-    // Simple test function
-    function testBasicFunction() {
-      console.log('Basic function works');
-      alert('Basic function test passed!');
-    }
-
-    // Test immediately
-    testBasicFunction();
-
-    // Load and save reply tone setting
-    document.addEventListener('DOMContentLoaded', function () {
-      console.log('DOMContentLoaded fired');
-      alert('DOM loaded!');
-
-      const replyToneSelect = document.getElementById('replyToneSelect');
-      console.log('Select element found:', !!replyToneSelect);
-
-      if (replyToneSelect) {
-        // Simple change handler
-        replyToneSelect.addEventListener('change', function (e) {
-          console.log('Dropdown changed to:', e.target.value);
-          alert('Dropdown changed to: ' + e.target.value);
-        });
-      }
-
-      // Simple button test
-      const debugButton = document.querySelector('.debug-storage-btn');
-      console.log('Debug button found:', !!debugButton);
-
-      if (debugButton) {
-        debugButton.onclick = function () {
-          alert('Debug button works!');
-          console.log('Debug button clicked!');
-        };
-      }
-    });
-  </script>
 </body>
 
 </html>
