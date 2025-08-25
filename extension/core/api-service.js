@@ -3,14 +3,13 @@
 class HumanRepliesAPI {
   constructor() {
     this.baseURL = 'https://api.humanreplies.com/v1'; // Future SaaS endpoint
-    this.fallbackMode = true; // Use DeepSeek directly for now
-    this.deepSeekKey = 'hidden';
-    this.deepSeekURL = 'https://api.deepseek.com/v1';
+    this.fallbackMode = true; // Use Pollinations.ai directly for now
+    this.pollinationsURL = 'https://text.pollinations.ai';
   }
 
   async generateReply(context, options = {}) {
     if (this.fallbackMode) {
-      return this.generateWithDeepSeek(context, options);
+      return this.generateWithPollinations(context, options);
     } else {
       return this.generateWithSaaS(context, options);
     }
@@ -52,45 +51,35 @@ class HumanRepliesAPI {
     }
   }
 
-  async generateWithDeepSeek(context, options) {
+  async generateWithPollinations(context, options) {
     try {
       const prompt = this.buildPrompt(context, options);
       
-      const response = await fetch(`${this.deepSeekURL}/chat/completions`, {
-        method: 'POST',
+      // Pollinations.ai uses a simple GET request with the prompt as a parameter
+      const encodedPrompt = encodeURIComponent(prompt);
+      const response = await fetch(`${this.pollinationsURL}/${encodedPrompt}`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.deepSeekKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are HumanReplies, an AI that generates thoughtful, human-like replies to social media posts. Keep responses concise, engaging, and authentic.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 280, // Twitter-like limit
-          temperature: 0.8
-        })
+          'Accept': 'text/plain',
+        }
       });
 
       if (!response.ok) {
-        throw new Error(`DeepSeek API error: ${response.status}`);
+        throw new Error(`Pollinations API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const reply = await response.text();
+      
+      // Clean up the response - remove any extra quotes or newlines
+      const cleanReply = reply.trim().replace(/^["']|["']$/g, '');
+      
       return {
-        reply: data.choices[0].message.content,
-        remainingReplies: null, // Unlimited in fallback mode
+        reply: cleanReply,
+        remainingReplies: null, // Free service - unlimited
         isLimitReached: false
       };
     } catch (error) {
-      console.error('DeepSeek API error:', error);
+      console.error('Pollinations API error:', error);
       throw error;
     }
   }
@@ -99,14 +88,26 @@ class HumanRepliesAPI {
     const tone = options.tone || 'helpful';
     const platform = options.platform || 'social media';
     
-    return `Generate a ${tone} reply to this ${platform} post: "${context}"
+    // Simplified prompt for Pollinations.ai - more direct and concise
+    let toneInstruction = '';
+    switch(tone) {
+      case 'joke':
+        toneInstruction = 'Write a funny, humorous response';
+        break;
+      case 'support':
+        toneInstruction = 'Write a supportive, encouraging response';
+        break;
+      case 'idea':
+        toneInstruction = 'Suggest an innovative idea or creative suggestion';
+        break;
+      case 'question':
+        toneInstruction = 'Ask a thoughtful question to encourage discussion';
+        break;
+      default:
+        toneInstruction = 'Write a helpful, balanced response';
+    }
     
-Requirements:
-- Keep it conversational and human-like
-- Match the tone of the original post
-- Be concise (under 280 characters)
-- Add value to the conversation
-- Avoid being overly promotional or salesy`;
+    return `${toneInstruction} to this ${platform} post: "${context}". Keep it under 280 characters, conversational, and human-like.`;
   }
 
   async getUserToken() {

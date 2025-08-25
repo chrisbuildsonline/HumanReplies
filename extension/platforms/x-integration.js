@@ -5,12 +5,12 @@ class XIntegration {
     this.apiService = new HumanRepliesAPI();
     this.debugMode = true; // Enable debugging
     this.addedButtons = new Set(); // Track added buttons to prevent duplicates
-    console.log('🧠 HumanReplies: X Integration initialized');
+    console.log("🧠 HumanReplies: X Integration initialized");
     this.init();
   }
 
   init() {
-    this.log('Starting initialization...');
+    this.log("Starting initialization...");
     this.detectTheme();
     this.injectReplyButtons();
     this.observePageChanges();
@@ -19,39 +19,41 @@ class XIntegration {
 
   detectTheme() {
     // Detect X (Twitter) theme
-    const isDarkMode = document.documentElement.style.colorScheme === 'dark' ||
-                      document.body.classList.contains('dark') ||
-                      document.querySelector('[data-theme="dark"]') ||
-                      window.matchMedia('(prefers-color-scheme: dark)').matches ||
-                      // X-specific dark mode detection
-                      document.querySelector('meta[name="theme-color"][content="#000000"]') ||
-                      document.querySelector('[style*="background-color: rgb(0, 0, 0)"]') ||
-                      getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
-    
+    const isDarkMode =
+      document.documentElement.style.colorScheme === "dark" ||
+      document.body.classList.contains("dark") ||
+      document.querySelector('[data-theme="dark"]') ||
+      window.matchMedia("(prefers-color-scheme: dark)").matches ||
+      // X-specific dark mode detection
+      document.querySelector('meta[name="theme-color"][content="#000000"]') ||
+      document.querySelector('[style*="background-color: rgb(0, 0, 0)"]') ||
+      getComputedStyle(document.body).backgroundColor === "rgb(0, 0, 0)";
+
     this.isDarkMode = isDarkMode;
-    this.log(`Theme detected: ${isDarkMode ? 'dark' : 'light'} mode`);
-    
+    this.log(`Theme detected: ${isDarkMode ? "dark" : "light"} mode`);
+
     // Watch for theme changes
     const observer = new MutationObserver(() => {
-      const newDarkMode = document.documentElement.style.colorScheme === 'dark' ||
-                         document.body.classList.contains('dark') ||
-                         document.querySelector('[data-theme="dark"]') ||
-                         getComputedStyle(document.body).backgroundColor === 'rgb(0, 0, 0)';
-      
+      const newDarkMode =
+        document.documentElement.style.colorScheme === "dark" ||
+        document.body.classList.contains("dark") ||
+        document.querySelector('[data-theme="dark"]') ||
+        getComputedStyle(document.body).backgroundColor === "rgb(0, 0, 0)";
+
       if (newDarkMode !== this.isDarkMode) {
         this.isDarkMode = newDarkMode;
-        this.log(`Theme changed to: ${newDarkMode ? 'dark' : 'light'} mode`);
+        this.log(`Theme changed to: ${newDarkMode ? "dark" : "light"} mode`);
       }
     });
-    
+
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['style', 'class', 'data-theme']
+      attributeFilter: ["style", "class", "data-theme"],
     });
-    
+
     observer.observe(document.body, {
       attributes: true,
-      attributeFilter: ['style', 'class']
+      attributeFilter: ["style", "class"],
     });
   }
 
@@ -64,27 +66,27 @@ class XIntegration {
   injectReplyButtons() {
     // Initial injection after page load
     setTimeout(() => {
-      this.log('Initial injection attempt...');
+      this.log("Initial injection attempt...");
       this.addReplyButtons();
     }, 2000);
-    
+
     // Single retry after a longer delay
     setTimeout(() => {
-      this.log('Retry injection attempt...');
+      this.log("Retry injection attempt...");
       this.addReplyButtons();
     }, 5000);
-    
+
     // Throttled scroll handler for new content
     let scrollTimeout;
     let lastScrollTime = 0;
-    
-    window.addEventListener('scroll', () => {
+
+    window.addEventListener("scroll", () => {
       const now = Date.now();
       if (now - lastScrollTime < 2000) return; // Throttle to max once per 2 seconds
-      
+
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
-        this.log('Scroll-triggered injection...');
+        this.log("Scroll-triggered injection...");
         this.addReplyButtons();
         lastScrollTime = Date.now();
       }, 1500);
@@ -92,135 +94,244 @@ class XIntegration {
   }
 
   addReplyButtons() {
-    this.log('Looking for compose toolbars...');
-    
-    // Find all toolbars using the same approach as the external plugin
-    const toolbars = document.querySelectorAll('[data-testid="toolBar"] nav[role="navigation"]');
-    this.log(`Found ${toolbars.length} compose toolbars`);
-    
+    this.log("Looking for REPLY toolbars only...");
+
+    // Find all toolbars but filter to only REPLY contexts
+    const toolbars = document.querySelectorAll(
+      '[data-testid="toolBar"] nav[role="navigation"]'
+    );
+    this.log(`Found ${toolbars.length} total toolbars, filtering for replies...`);
+
     toolbars.forEach((toolbar, index) => {
       try {
         // Check if we already added our button to this toolbar
-        if (toolbar.querySelector('.humanreplies-icon-wrapper')) {
+        if (toolbar.querySelector(".humanreplies-icon-wrapper")) {
           this.log(`Toolbar ${index + 1}: Already has our button`);
           return;
         }
-        
-        this.log(`Toolbar ${index + 1}: Adding AI Reply button to toolbar`);
-        
-        // Create our button wrapper exactly like the external plugin
-        const wrapper = document.createElement('div');
-        wrapper.className = 'humanreplies-icon-wrapper';
+
+        // CRITICAL: Only add button if this is a REPLY toolbar, not a new post toolbar
+        if (!this.isReplyToolbar(toolbar)) {
+          this.log(`Toolbar ${index + 1}: Skipping - not a reply toolbar`);
+          return;
+        }
+
+        this.log(`Toolbar ${index + 1}: Adding AI Reply button to REPLY toolbar`);
+
+        // Create our button wrapper
+        const wrapper = document.createElement("div");
+        wrapper.className = "humanreplies-icon-wrapper";
         wrapper.id = `humanreplies-button-${index}`;
-        
+
         // Create our button
         const humanRepliesBtn = this.createReplyButton();
         wrapper.appendChild(humanRepliesBtn);
-        
-        // Insert directly into the nav element, just like the external plugin
+
+        // Insert directly into the nav element
         toolbar.appendChild(wrapper);
-        
-        this.log(`Successfully added button to toolbar ${index + 1}`);
-        
+
+        this.log(`Successfully added button to REPLY toolbar ${index + 1}`);
       } catch (error) {
         this.log(`Error processing toolbar ${index + 1}: ${error.message}`);
       }
     });
   }
 
-
+  isReplyToolbar(toolbar) {
+    // Check multiple indicators that this is a reply interface, not a new post
+    try {
+      // Method 1: Look for reply-specific elements in the surrounding DOM
+      let parent = toolbar.parentElement;
+      let depth = 0;
+      
+      while (parent && depth < 10) {
+        try {
+          // Look for reply indicators
+          if (parent.querySelector('[data-testid*="reply"]') ||
+              parent.querySelector('[aria-label*="reply"]') ||
+              parent.querySelector('[aria-label*="Reply"]')) {
+            this.log("Found reply indicator in parent elements");
+            return true;
+          }
+          
+          // Look for tweet content above (indicates this is a reply to something)
+          if (parent.querySelector('[data-testid="tweetText"]') ||
+              parent.querySelector('article[data-testid="tweet"]')) {
+            this.log("Found tweet content above - this is likely a reply");
+            return true;
+          }
+        } catch (e) {
+          // Continue if selector fails
+        }
+        
+        parent = parent.parentElement;
+        depth++;
+      }
+      
+      // Method 2: Check if the associated textarea has reply-specific attributes
+      try {
+        const nearbyTextarea = toolbar.closest('[data-testid="tweetTextarea_0"]') ||
+                              document.querySelector('[data-testid="tweetTextarea_0"]');
+        
+        if (nearbyTextarea) {
+          const placeholder = nearbyTextarea.getAttribute('aria-label') || 
+                             nearbyTextarea.getAttribute('placeholder') || '';
+          
+          if (placeholder.toLowerCase().includes('reply')) {
+            this.log("Found reply in textarea placeholder/label");
+            return true;
+          }
+        }
+      } catch (e) {
+        this.log("Method 2 failed, continuing...");
+      }
+      
+      // Method 3: Check URL for reply context
+      try {
+        if (window.location.href.includes('/status/') && 
+            window.location.href.includes('reply')) {
+          this.log("URL indicates reply context");
+          return true;
+        }
+      } catch (e) {
+        // Continue if URL check fails
+      }
+      
+      // Method 4: Look for "Replying to" text using text content search
+      try {
+        const replyToElements = document.querySelectorAll('[data-testid="reply-to"], span, div');
+        for (const element of replyToElements) {
+          if (element.textContent && element.textContent.includes('Replying to')) {
+            this.log("Found 'Replying to' text indicator");
+            return true;
+          }
+        }
+      } catch (e) {
+        this.log("Method 4 failed, continuing...");
+      }
+      
+      // Method 5: Check for Draft.js placeholder that says "Post your reply"
+      try {
+        const placeholders = document.querySelectorAll('.public-DraftEditorPlaceholder-inner');
+        for (const placeholder of placeholders) {
+          if (placeholder.textContent && placeholder.textContent.includes('Post your reply')) {
+            this.log("Found 'Post your reply' placeholder - this is a reply interface");
+            return true;
+          }
+        }
+      } catch (e) {
+        this.log("Method 5 failed, continuing...");
+      }
+      
+      // Method 6: Simple check - if we're on a tweet status page, assume it's a reply context
+      try {
+        if (window.location.pathname.includes('/status/')) {
+          this.log("On tweet status page - likely a reply context");
+          return true;
+        }
+      } catch (e) {
+        // Continue
+      }
+      
+    } catch (error) {
+      this.log(`Error in isReplyToolbar: ${error.message}`);
+    }
+    
+    this.log("No reply indicators found - this appears to be a new post toolbar");
+    return false;
+  }
 
   isReplyArea(element) {
     // Check various indicators that this is a reply area
     const indicators = [
-      element.getAttribute('data-text')?.includes('reply'),
-      element.getAttribute('aria-label')?.includes('reply'),
-      element.getAttribute('placeholder')?.includes('reply'),
+      element.getAttribute("data-text")?.includes("reply"),
+      element.getAttribute("aria-label")?.includes("reply"),
+      element.getAttribute("placeholder")?.includes("reply"),
       element.closest('[data-testid*="reply"]'),
       element.closest('[aria-label*="reply"]'),
       // Look for reply context in parent elements
-      this.hasReplyContext(element)
+      this.hasReplyContext(element),
     ];
-    
-    return indicators.some(indicator => indicator);
+
+    return indicators.some((indicator) => indicator);
   }
 
   hasReplyContext(element) {
     // Look for tweet content above this element (indicating it's a reply)
     let parent = element.parentElement;
     let depth = 0;
-    
+
     while (parent && depth < 10) {
-      if (parent.querySelector('[data-testid="tweetText"]') ||
-          parent.querySelector('[data-testid="tweet"]') ||
-          parent.querySelector('article')) {
+      if (
+        parent.querySelector('[data-testid="tweetText"]') ||
+        parent.querySelector('[data-testid="tweet"]') ||
+        parent.querySelector("article")
+      ) {
         return true;
       }
       parent = parent.parentElement;
       depth++;
     }
-    
+
     return false;
   }
 
   getElementId(element) {
     // Create a unique ID for the element
     if (!element.dataset.humanrepliesId) {
-      element.dataset.humanrepliesId = 'hr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      element.dataset.humanrepliesId =
+        "hr_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     }
     return element.dataset.humanrepliesId;
   }
 
   createReplyButton(textarea = null) {
-    const button = document.createElement('button');
-    button.className = 'humanreplies-reply-btn';
-    button.innerHTML = '🧠';
-    button.title = 'Generate AI Reply';
+    const button = document.createElement("button");
+    button.className = "humanreplies-reply-btn";
+    button.innerHTML = "";
+    button.title = "Generate AI Reply";
     if (textarea) {
       button.dataset.humanrepliesFor = this.getElementId(textarea);
     }
-    
-    // Compact styling similar to the external plugin
-    const isDark = this.isDarkMode;
-    
+    // Remove all inline background/color/font styles so CSS background image is used
     button.style.cssText = `
-      background: ${isDark ? 'linear-gradient(135deg, #1d9bf0 0%, #0d7ec7 100%)' : 'linear-gradient(135deg, #2c3e50 0%, #34495e 100)'};
-      color: white;
       border: none;
       border-radius: 50%;
       width: 32px;
       height: 32px;
-      font-size: 16px;
       cursor: pointer;
       transition: all 0.2s ease;
-      box-shadow: 0 2px 6px ${isDark ? 'rgba(29, 155, 240, 0.3)' : 'rgba(44, 62, 80, 0.2)'};
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 2px 6px rgba(44, 62, 80, 0.2);
       display: flex;
       align-items: center;
       justify-content: center;
       margin: 0;
       padding: 0;
     `;
-    
-    button.addEventListener('mouseenter', () => {
-      button.style.transform = 'translateY(-1px) scale(1.02)';
-      if (isDark) {
-        button.style.boxShadow = '0 4px 16px rgba(29, 155, 240, 0.4)';
-        button.style.background = 'linear-gradient(135deg, #1a8cd8 0%, #0d7ec7 50%, #0a6bb3 100%)';
+
+    button.addEventListener("mouseenter", () => {
+      button.style.transform = "translateY(-1px) scale(1.02)";
+      if (this.isDarkMode) {
+        button.style.boxShadow = "0 4px 16px rgba(29, 155, 240, 0.4)";
+        button.style.background =
+          "linear-gradient(135deg, #1a8cd8 0%, #0d7ec7 50%, #0a6bb3 100%)";
       } else {
-        button.style.boxShadow = '0 4px 16px rgba(44, 62, 80, 0.3)';
-        button.style.background = 'linear-gradient(135deg, #34495e 0%, #2c3e50 100%)';
+        button.style.boxShadow = "0 4px 16px rgba(44, 62, 80, 0.3)";
+        button.style.background =
+          "linear-gradient(135deg, #34495e 0%, #2c3e50 100%)";
       }
     });
-    
-    button.addEventListener('mouseleave', () => {
-      button.style.transform = 'translateY(0) scale(1)';
-      if (isDark) {
-        button.style.boxShadow = '0 2px 8px rgba(29, 155, 240, 0.3)';
-        button.style.background = 'linear-gradient(135deg, #1d9bf0 0%, #1a8cd8 50%, #0d7ec7 100%)';
+
+    button.addEventListener("mouseleave", () => {
+      button.style.transform = "translateY(0) scale(1)";
+      if (this.isDarkMode) {
+        button.style.boxShadow = "0 2px 8px rgba(29, 155, 240, 0.3)";
+        button.style.background =
+          "linear-gradient(135deg, #1d9bf0 0%, #1a8cd8 50%, #0d7ec7 100%)";
       } else {
-        button.style.boxShadow = '0 2px 8px rgba(44, 62, 80, 0.2)';
-        button.style.background = 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)';
+        button.style.boxShadow = "0 2px 8px rgba(44, 62, 80, 0.2)";
+        button.style.background =
+          "linear-gradient(135deg, #2c3e50 0%, #34495e 100%)";
       }
     });
 
@@ -229,45 +340,65 @@ class XIntegration {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      
-      console.log('🧠 HumanReplies: AI Reply button clicked!');
-      this.log('AI Reply button clicked');
-      
+
+      console.log("🧠 HumanReplies: AI Reply button clicked!");
+      this.log("AI Reply button clicked");
+
       // Visual feedback
-      button.style.transform = 'scale(0.95)';
+      button.style.transform = "scale(0.95)";
       setTimeout(() => {
-        button.style.transform = '';
+        button.style.transform = "";
       }, 100);
-      
+
       try {
         // Find the nearest textarea for this button
         const nearestTextarea = this.findNearestTextarea(button);
-        this.log(`Found textarea: ${nearestTextarea ? 'yes' : 'no'}`);
-        
+        this.log(`Found textarea: ${nearestTextarea ? "yes" : "no"}`);
+
         if (nearestTextarea) {
           this.showReplyToneMenu(button, nearestTextarea);
         } else {
           // Try to find any reply textarea on the page
-          const anyReplyTextarea = document.querySelector('[data-testid="tweetTextarea_0"]');
+          const anyReplyTextarea = document.querySelector(
+            '[data-testid="tweetTextarea_0"]'
+          );
           if (anyReplyTextarea) {
-            this.log('Using fallback textarea');
+            this.log("Using fallback textarea");
             this.showReplyToneMenu(button, anyReplyTextarea);
           } else {
-            this.log('No textarea found, showing alert');
-            alert('Please click reply on a tweet first, then use the AI Reply button.');
+            this.log("No textarea found, showing alert");
+            alert(
+              "Please click reply on a tweet first, then use the AI Reply button."
+            );
           }
         }
       } catch (error) {
         this.log(`Error in showReplyToneMenu: ${error.message}`);
-        console.error('Error in showReplyToneMenu:', error);
+        console.error("Error in showReplyToneMenu:", error);
         alert(`Error: ${error.message}`);
       }
     };
-    
+
     // Add multiple event listeners for better compatibility
-    button.addEventListener('click', clickHandler);
-    button.addEventListener('mousedown', clickHandler);
-    button.addEventListener('touchstart', clickHandler, { passive: false });
+    // Always show dropdown, even if no textarea is found
+    const debugClickHandler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.log("HumanReplies button clicked (debug handler)");
+      let nearestTextarea = this.findNearestTextarea(button);
+      if (!nearestTextarea) {
+        this.log("No nearest textarea found, using fallback selector.");
+        nearestTextarea = document.querySelector(
+          '[data-testid="tweetTextarea_0"]'
+        );
+      }
+      if (!nearestTextarea) {
+        this.log("Still no textarea found, passing null to showReplyToneMenu.");
+      }
+      this.showReplyToneMenu(button, nearestTextarea);
+    };
+    // Only use click event to prevent double triggers
+    button.addEventListener("click", debugClickHandler);
 
     return button;
   }
@@ -276,38 +407,38 @@ class XIntegration {
     // Try to find a unique identifier for this tweet
     let parent = element;
     let depth = 0;
-    
+
     while (parent && depth < 10) {
       // Look for tweet-specific attributes or IDs
-      if (parent.getAttribute('data-testid') === 'tweet') {
+      if (parent.getAttribute("data-testid") === "tweet") {
         // Use the tweet element's position or content as ID
         const tweetText = parent.querySelector('[data-testid="tweetText"]');
         if (tweetText) {
-          return 'tweet_' + tweetText.textContent.substring(0, 20).replace(/\W/g, '');
+          return (
+            "tweet_" + tweetText.textContent.substring(0, 20).replace(/\W/g, "")
+          );
         }
       }
-      
+
       // Look for any unique identifier
       if (parent.id) {
         return parent.id;
       }
-      
+
       parent = parent.parentElement;
       depth++;
     }
-    
+
     // Fallback: use element's position in DOM
-    return 'btn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return "btn_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
   }
 
-
-
   insertReplyButton(textarea, button) {
-    this.log('Inserting reply button...');
-    
+    this.log("Inserting reply button...");
+
     // Create a container for our button
-    const container = document.createElement('div');
-    container.className = 'humanreplies-container';
+    const container = document.createElement("div");
+    container.className = "humanreplies-container";
     container.style.cssText = `
       margin: 8px 0;
       padding: 0;
@@ -315,20 +446,21 @@ class XIntegration {
       justify-content: flex-start;
     `;
     container.appendChild(button);
-    
+
     // Try different insertion strategies
     const insertionStrategies = [
       // Strategy 1: After toolbar
       () => {
-        const toolbar = textarea.closest('[data-testid="toolBar"]') || 
-                       textarea.parentElement.querySelector('[role="toolbar"]');
+        const toolbar =
+          textarea.closest('[data-testid="toolBar"]') ||
+          textarea.parentElement.querySelector('[role="toolbar"]');
         if (toolbar) {
           toolbar.parentElement.insertBefore(container, toolbar.nextSibling);
           return true;
         }
         return false;
       },
-      
+
       // Strategy 2: After textarea parent
       () => {
         if (textarea.parentElement) {
@@ -337,14 +469,16 @@ class XIntegration {
         }
         return false;
       },
-      
+
       // Strategy 3: Find compose area and append
       () => {
         let parent = textarea.parentElement;
         let depth = 0;
         while (parent && depth < 5) {
-          if (parent.querySelector('[data-testid*="compose"]') || 
-              parent.querySelector('[data-testid*="reply"]')) {
+          if (
+            parent.querySelector('[data-testid*="compose"]') ||
+            parent.querySelector('[data-testid*="reply"]')
+          ) {
             parent.appendChild(container);
             return true;
           }
@@ -353,7 +487,7 @@ class XIntegration {
         }
         return false;
       },
-      
+
       // Strategy 4: Simple append to parent
       () => {
         if (textarea.parentElement) {
@@ -361,9 +495,9 @@ class XIntegration {
           return true;
         }
         return false;
-      }
+      },
     ];
-    
+
     for (let i = 0; i < insertionStrategies.length; i++) {
       try {
         if (insertionStrategies[i]()) {
@@ -374,305 +508,412 @@ class XIntegration {
         this.log(`Strategy ${i + 1} failed: ${error.message}`);
       }
     }
-    
-    this.log('All insertion strategies failed');
+
+    this.log("All insertion strategies failed");
   }
 
   async handleReplyGeneration(button, textarea, selectedTone = null) {
-    this.log('Handling reply generation...');
-    
+    this.log("Handling reply generation...");
+
     if (!textarea) {
       textarea = this.findNearestTextarea(button);
     }
-    
+
     if (!textarea) {
-      this.log('No textarea found');
-      this.showError(button, 'Could not find text area');
+      this.log("No textarea found");
+      this.showError(button, "Could not find text area");
       return;
     }
 
     const tweetContext = this.getTweetContext(button);
     this.log(`Tweet context: "${tweetContext}"`);
-    
+
     if (!tweetContext) {
-      this.showError(button, 'Could not find tweet to reply to');
+      this.showError(button, "Could not find tweet to reply to");
       return;
     }
 
     this.showLoadingState(button);
-    
+
     try {
-      this.log('Calling API service...');
-      
+      this.log("Calling API service...");
+
       // Build tone-specific prompt
-      const tonePrompt = this.buildReplyPromptWithTone(tweetContext, selectedTone);
-      
+      const tonePrompt = this.buildReplyPromptWithTone(
+        tweetContext,
+        selectedTone
+      );
+
       const result = await this.apiService.generateReply(tonePrompt, {
-        platform: 'x',
-        tone: selectedTone || 'helpful'
+        platform: "x",
+        tone: selectedTone || "helpful",
       });
+
+      // Enforce 280 character limit
+      const processedReply = this.enforceCharacterLimit(result.reply, 280);
+      this.log(`Generated reply (${processedReply.length} chars): "${processedReply}"`);
       
-      this.log(`Generated reply: "${result.reply}"`);
-      this.insertReply(textarea, result.reply);
+      this.insertReply(textarea, processedReply);
       this.showSuccessState(button, result.remainingReplies);
-      
     } catch (error) {
       this.log(`Reply generation failed: ${error.message}`);
-      console.error('Reply generation failed:', error);
+      console.error("Reply generation failed:", error);
       this.showError(button, error.message);
     }
   }
 
   buildReplyPromptWithTone(tweetContext, tone) {
     const basePrompt = `Generate a thoughtful reply to this tweet: "${tweetContext}"`;
-    
+
     const toneInstructions = {
-      neutral: 'Write a balanced, professional, and neutral response.',
-      joke: 'Write a funny, humorous response that adds levity while staying respectful.',
-      support: 'Write a supportive, encouraging, and empathetic response that shows understanding.',
-      idea: 'Write a response that presents an innovative idea or creative suggestion related to the topic.',
-      question: 'Write a response that asks a thoughtful question to encourage further discussion.'
+      neutral: "Write a balanced, professional, and neutral response.",
+      joke: "Write a funny, humorous response that adds levity while staying respectful.",
+      support:
+        "Write a supportive, encouraging, and empathetic response that shows understanding.",
+      idea: "Write a response that presents an innovative idea or creative suggestion related to the topic.",
+      question:
+        "Write a response that asks a thoughtful question to encourage further discussion.",
     };
+
+    const toneInstruction =
+      toneInstructions[tone] || "Write a helpful and engaging response.";
+
+    return `${basePrompt}\n\nTone instruction: ${toneInstruction}\n\nIMPORTANT: The response MUST be under 280 characters (Twitter limit). Be concise, engaging, and conversational. Count characters carefully.`;
+  }
+
+  enforceCharacterLimit(text, maxLength = 280) {
+    if (text.length <= maxLength) {
+      return text;
+    }
     
-    const toneInstruction = toneInstructions[tone] || 'Write a helpful and engaging response.';
+    this.log(`Reply too long (${text.length} chars), truncating to ${maxLength}...`);
     
-    return `${basePrompt}\n\nTone instruction: ${toneInstruction}\n\nKeep the response under 280 characters and make it conversational.`;
+    // Try to truncate at a word boundary
+    const truncated = text.substring(0, maxLength);
+    const lastSpaceIndex = truncated.lastIndexOf(' ');
+    
+    if (lastSpaceIndex > maxLength * 0.8) {
+      // If we can find a space in the last 20% of the text, use that
+      return truncated.substring(0, lastSpaceIndex).trim() + '...';
+    } else {
+      // Otherwise, hard truncate and add ellipsis
+      return truncated.substring(0, maxLength - 3).trim() + '...';
+    }
   }
 
   findNearestTextarea(button) {
-    this.log('Finding nearest textarea for button...');
-    
+    this.log("Finding nearest textarea for button...");
+
     // Strategy 1: Look in the same tweet/reply container
     let parent = button.parentElement;
     let depth = 0;
-    
+
     while (parent && depth < 10) {
       // Look for text areas in this container
       const textareas = [
         parent.querySelector('[data-testid="tweetTextarea_0"]'),
-        parent.querySelector('textarea'),
+        parent.querySelector("textarea"),
         parent.querySelector('[contenteditable="true"][role="textbox"]'),
         parent.querySelector('[contenteditable="true"][aria-label*="reply"]'),
-        parent.querySelector('[contenteditable="true"][data-text*="reply"]')
+        parent.querySelector('[contenteditable="true"][data-text*="reply"]'),
       ].filter(Boolean);
-      
+
       if (textareas.length > 0) {
         this.log(`Found textarea using strategy 1 at depth ${depth}`);
         return textareas[0];
       }
-      
+
       parent = parent.parentElement;
       depth++;
     }
-    
+
     // Strategy 2: Look for any reply textarea on the page
-    const allTextareas = document.querySelectorAll('[data-testid="tweetTextarea_0"]');
+    const allTextareas = document.querySelectorAll(
+      '[data-testid="tweetTextarea_0"]'
+    );
     for (const textarea of allTextareas) {
       if (this.isReplyArea(textarea)) {
-        this.log('Found textarea using strategy 2 (page-wide search)');
+        this.log("Found textarea using strategy 2 (page-wide search)");
         return textarea;
       }
     }
-    
-    this.log('No textarea found');
+
+    this.log("No textarea found");
     return null;
   }
 
   getTweetContext(button) {
-    this.log('Looking for tweet context...');
-    
+    this.log("Looking for tweet context...");
+
     // Strategy 1: Look in parent elements for tweet content
     let parent = button.parentElement;
     let depth = 0;
-    
+
     while (parent && depth < 15) {
       // Look for tweet text in various selectors
       const selectors = [
         '[data-testid="tweetText"]',
         '[data-testid="tweet"] [lang]',
-        'article [lang]',
-        '[role="article"] [lang]'
+        "article [lang]",
+        '[role="article"] [lang]',
       ];
-      
+
       for (const selector of selectors) {
         const tweetText = parent.querySelector(selector);
         if (tweetText && tweetText.textContent.trim()) {
           const context = tweetText.textContent.trim();
-          this.log(`Found context via ${selector}: "${context.substring(0, 50)}..."`);
+          this.log(
+            `Found context via ${selector}: "${context.substring(0, 50)}..."`
+          );
           return context;
         }
       }
-      
+
       parent = parent.parentElement;
       depth++;
     }
-    
+
     // Strategy 2: Look for any tweet on the current page
-    this.log('Fallback: Looking for any tweet on page...');
+    this.log("Fallback: Looking for any tweet on page...");
     const fallbackSelectors = [
       '[data-testid="tweetText"]',
-      'article [lang]',
-      '[role="article"] [lang]'
+      "article [lang]",
+      '[role="article"] [lang]',
     ];
-    
+
     for (const selector of fallbackSelectors) {
       const tweets = document.querySelectorAll(selector);
       for (const tweet of tweets) {
         const text = tweet.textContent.trim();
-        if (text && text.length > 10) { // Reasonable tweet length
+        if (text && text.length > 10) {
+          // Reasonable tweet length
           this.log(`Found fallback context: "${text.substring(0, 50)}..."`);
           return text;
         }
       }
     }
-    
+
     // Strategy 3: Use a generic context
-    this.log('No specific context found, using generic');
-    return 'This is an interesting post. Let me share my thoughts.';
+    this.log("No specific context found, using generic");
+    return "This is an interesting post. Let me share my thoughts.";
   }
 
   insertReply(textarea, reply) {
     this.log(`Inserting reply into ${textarea.tagName}: "${reply}"`);
-    
+
     try {
-      if (textarea.tagName === 'TEXTAREA') {
+      if (textarea.tagName === "TEXTAREA") {
         // Standard textarea
         textarea.value = reply;
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
-        // Contenteditable element (more common on X)
+        // Twitter Draft.js editor - focus first and simulate typing
+        this.log("Focusing textarea before text insertion");
+        textarea.focus();
         
-        // Method 1: Set textContent
-        textarea.textContent = reply;
-        
-        // Method 2: Set innerHTML (backup)
-        if (!textarea.textContent) {
-          textarea.innerHTML = reply;
-        }
-        
-        // Method 3: Use document.execCommand (legacy but sometimes works)
-        if (!textarea.textContent) {
-          textarea.focus();
-          document.execCommand('selectAll');
-          document.execCommand('insertText', false, reply);
-        }
-        
-        // Trigger various events that X might be listening for
-        const events = ['input', 'change', 'keyup', 'paste'];
-        events.forEach(eventType => {
-          textarea.dispatchEvent(new Event(eventType, { bubbles: true }));
-        });
-        
-        // Try to trigger React events
-        const reactProps = Object.keys(textarea).find(key => key.startsWith('__reactProps'));
-        if (reactProps && textarea[reactProps]?.onChange) {
-          textarea[reactProps].onChange({ target: { value: reply } });
-        }
-        
-        // Alternative React trigger
-        const reactFiber = Object.keys(textarea).find(key => key.startsWith('__reactInternalInstance'));
-        if (reactFiber) {
-          const event = new Event('input', { bubbles: true });
-          event.target.value = reply;
-          textarea.dispatchEvent(event);
-        }
+        // Wait a moment for Draft.js to initialize, then try insertion methods
+        setTimeout(() => {
+          let success = false;
+          
+          // Method 1: Simulate paste operation (most reliable for Draft.js)
+          try {
+            textarea.focus();
+            this.log("Textarea focused, attempting paste simulation");
+            
+            // Create a paste event with clipboard data
+            const pasteEvent = new ClipboardEvent('paste', {
+              clipboardData: new DataTransfer(),
+              bubbles: true,
+              cancelable: true
+            });
+            
+            // Add the reply text to clipboard data
+            pasteEvent.clipboardData.setData('text/plain', reply);
+            
+            // Dispatch the paste event
+            const pasteSuccess = textarea.dispatchEvent(pasteEvent);
+            this.log(`Paste event dispatched, success: ${pasteSuccess}`);
+            
+            // Check if text was actually inserted
+            setTimeout(() => {
+              const currentContent = textarea.textContent || textarea.innerText || '';
+              this.log(`Current textarea content after paste: "${currentContent}"`);
+              if (currentContent.includes(reply) || currentContent.trim() === reply.trim()) {
+                this.log("Paste method successful - text is visible");
+                success = true;
+              } else {
+                this.log("Paste method failed - text not visible in textarea");
+              }
+            }, 50);
+            
+          } catch (error) {
+            this.log(`Paste simulation failed: ${error.message}`);
+          }
+          
+          // Method 1b: Fallback to execCommand if keyboard simulation fails
+          if (!success) {
+            try {
+              const selection = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(textarea);
+              range.collapse(false);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              
+              // Clear existing content first
+              document.execCommand('selectAll');
+              document.execCommand('delete');
+              
+              // Insert the reply text
+              document.execCommand('insertText', false, reply);
+              success = true;
+              this.log("Used execCommand method successfully");
+            } catch (error) {
+              this.log(`execCommand failed: ${error.message}`);
+            }
+          }
+          
+          // Method 2: Directly manipulate Draft.js DOM structure
+          if (!success) {
+            this.log("Attempting direct Draft.js DOM manipulation");
+            
+            // Look for the exact structure we saw in the HTML
+            const contentsDiv = textarea.querySelector('div[data-contents="true"]');
+            if (contentsDiv) {
+              this.log("Found data-contents div, rebuilding structure");
+              
+              // Get the editor ID from existing structure
+              const editorId = textarea.getAttribute('aria-describedby') || 'editor';
+              const offsetKey = `${editorId.replace('placeholder-', '')}-0-0`;
+              
+              // Create new block structure with text
+              const newBlock = `
+                <div class="" data-block="true" data-editor="${editorId.replace('placeholder-', '')}" data-offset-key="${offsetKey}">
+                  <div data-offset-key="${offsetKey}" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr">
+                    <span data-offset-key="${offsetKey}">
+                      <span data-text="true">${reply}</span>
+                    </span>
+                  </div>
+                </div>
+              `;
+              
+              // Replace the contents
+              contentsDiv.innerHTML = newBlock;
+              this.log("Rebuilt Draft.js structure with reply text");
+              success = true;
+              
+              // Verify the text is there
+              setTimeout(() => {
+                const textSpan = textarea.querySelector('span[data-text="true"]');
+                if (textSpan && textSpan.textContent === reply) {
+                  this.log("Verification: Text successfully inserted and visible");
+                } else {
+                  this.log("Verification: Text insertion may have failed");
+                }
+              }, 100);
+            }
+          }
+          
+          // Method 3: Direct content replacement as fallback
+          if (!success) {
+            this.log("Using direct content replacement fallback");
+            textarea.textContent = reply;
+            success = true;
+          }
+
+          // Trigger comprehensive events to notify Draft.js of changes
+          const events = ["input", "change", "keyup", "keydown", "beforeinput", "textInput"];
+          events.forEach((eventType) => {
+            try {
+              const event = new Event(eventType, { bubbles: true, cancelable: true });
+              textarea.dispatchEvent(event);
+            } catch (e) {
+              this.log(`Event ${eventType} failed: ${e.message}`);
+            }
+          });
+
+          // Try React events
+          try {
+            const reactProps = Object.keys(textarea).find((key) =>
+              key.startsWith("__reactProps") || 
+              key.startsWith("__reactInternalInstance") ||
+              key.startsWith("__reactFiber")
+            );
+            if (reactProps && textarea[reactProps]?.onChange) {
+              textarea[reactProps].onChange({ target: { value: reply } });
+            }
+          } catch (e) {
+            this.log(`React event failed: ${e.message}`);
+          }
+          
+          this.log(`Draft.js text insertion success: ${success}`);
+        }, 100); // Small delay to let Draft.js initialize
       }
-      
-      // Focus and position cursor at end
-      textarea.focus();
-      
-      // Set cursor to end for contenteditable
-      if (textarea.contentEditable === 'true') {
-        const range = document.createRange();
-        const selection = window.getSelection();
-        range.selectNodeContents(textarea);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-      
-      this.log('Reply inserted successfully');
-      
+
+      this.log("Reply inserted successfully");
     } catch (error) {
       this.log(`Error inserting reply: ${error.message}`);
-      console.error('Error inserting reply:', error);
+      console.error("Error inserting reply:", error);
     }
   }
 
   showLoadingState(button) {
-    button.innerHTML = '⏳ Generating...';
+    button.innerHTML = `
+      <span class="humanreplies-spinner" style="display:inline-block;width:20px;height:20px;vertical-align:middle;">
+        <svg width="20" height="20" viewBox="0 0 50 50" style="background:#f6f1e8;border-radius:50%;">
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#f6f1e8" stroke-width="8"/>
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#000000" stroke-width="6" stroke-linecap="round" stroke-dasharray="31.4 94.2" stroke-dashoffset="0">
+            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </span>
+    `;
     button.disabled = true;
-    button.style.opacity = '0.7';
+    button.style.opacity = "1";
+    button.style.background = "#f6f1e8";
+    button.style.color = "#000000";
+    button.classList.add("loading");
   }
 
   showSuccessState(button, remainingReplies) {
-    button.innerHTML = '✅ Reply Generated';
+    button.innerHTML = "✅";
     button.disabled = false;
-    button.style.opacity = '1';
-    
-    if (remainingReplies !== null) {
-      button.title = `${remainingReplies} replies remaining today`;
-    }
-    
-    // Reset button after 2 seconds
-    setTimeout(() => {
-      button.innerHTML = '🧠 Generate Reply';
-    }, 2000);
-  }
+    button.style.opacity = "1";
+    button.classList.add("loading");
 
-  showError(button, message) {
-    button.innerHTML = '❌ Error';
-    button.disabled = false;
-    button.style.opacity = '1';
-    button.title = message;
-    
-    // Reset button after 3 seconds
+    // Hide this after 3 seconds
     setTimeout(() => {
-      button.innerHTML = '🧠 Generate Reply';
-      button.title = '';
+      button.innerHTML = "";
+      button.classList.remove("loading");
     }, 3000);
   }
 
-  observePageChanges() {
-    // Watch for dynamic content changes on X
-    const observer = new MutationObserver((mutations) => {
-      let shouldUpdate = false;
-      
-      mutations.forEach(mutation => {
-        if (mutation.addedNodes.length > 0) {
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === 1 && 
-                (node.querySelector('[data-testid="tweetTextarea_0"]') ||
-                 node.matches('[data-testid="tweetTextarea_0"]'))) {
-              shouldUpdate = true;
-            }
-          });
-        }
-      });
-      
-      if (shouldUpdate) {
-        setTimeout(() => this.addReplyButtons(), 500);
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+  showError(button, message) {
+    button.innerHTML = "❌ Error";
+    button.disabled = false;
+    button.style.opacity = "1";
+    button.title = message;
+    button.classList.remove("loading");
+    
+    // Reset after 3 seconds
+    setTimeout(() => {
+      button.innerHTML = "";
+      button.title = "";
+    }, 3000);
   }
 
   // Text Selection Toolbar Feature
   initTextSelectionToolbar() {
-    this.log('Initializing text selection toolbar...');
+    this.log("Initializing text selection toolbar...");
     this.currentToolbar = null;
     this.selectionTimeout = null;
-    this.lastSelectedText = '';
+    this.lastSelectedText = "";
     this.isProcessingSelection = false;
-    
+
     // Only listen for mouseup events to avoid conflicts
-    document.addEventListener('mouseup', (e) => this.handleTextSelection(e));
-    document.addEventListener('click', (e) => this.handleDocumentClick(e));
+    document.addEventListener("mouseup", (e) => this.handleTextSelection(e));
+    document.addEventListener("click", (e) => this.handleDocumentClick(e));
   }
 
   handleTextSelection(e) {
@@ -680,37 +921,43 @@ class XIntegration {
     if (this.isProcessingSelection) {
       return;
     }
-    
+
     // Clear any existing timeout
     if (this.selectionTimeout) {
       clearTimeout(this.selectionTimeout);
     }
-    
+
     // Wait a bit for selection to stabilize
     this.selectionTimeout = setTimeout(() => {
       this.isProcessingSelection = true;
-      
+
       const selection = window.getSelection();
       const selectedText = selection.toString().trim();
-      
-      this.log(`Selection check - Text: "${selectedText}", Length: ${selectedText.length}`);
-      
+
+      this.log(
+        `Selection check - Text: "${selectedText}", Length: ${selectedText.length}`
+      );
+
       // Only process if the selection has actually changed
       if (selectedText !== this.lastSelectedText) {
         this.lastSelectedText = selectedText;
-        
+
         if (selectedText && selectedText.length > 2) {
-          this.log(`Valid text selected: "${selectedText.substring(0, 30)}..."`);
+          this.log(
+            `Valid text selected: "${selectedText.substring(0, 30)}..."`
+          );
           this.showSelectionToolbar(selection, selectedText);
         } else {
           // Only hide if we're not clicking on the toolbar itself
           if (!this.isInteractingWithToolbar(e.target)) {
-            this.log('No valid selection and not interacting with toolbar, hiding');
+            this.log(
+              "No valid selection and not interacting with toolbar, hiding"
+            );
             this.hideSelectionToolbar();
           }
         }
       }
-      
+
       // Reset processing flag after a short delay
       setTimeout(() => {
         this.isProcessingSelection = false;
@@ -721,31 +968,33 @@ class XIntegration {
   handleDocumentClick(e) {
     // Don't process clicks if we're already processing selection
     if (this.isProcessingSelection) {
-      this.log('Ignoring click - processing selection');
+      this.log("Ignoring click - processing selection");
       return;
     }
-    
+
     // Check if clicking on toolbar elements
     if (this.isInteractingWithToolbar(e.target)) {
-      this.log('Clicked on toolbar, ignoring');
+      this.log("Clicked on toolbar, ignoring");
       return;
     }
-    
-    this.log(`Document clicked on: ${e.target.tagName} with classes: ${e.target.className}`);
-    
+
+    this.log(
+      `Document clicked on: ${e.target.tagName} with classes: ${e.target.className}`
+    );
+
     // Only hide toolbar if clicking outside of it AND there's no text selection
     if (this.currentToolbar) {
       // Small delay to check if selection still exists after click
       setTimeout(() => {
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
-        
+
         if (!selectedText || selectedText.length === 0) {
-          this.log('Clicked outside toolbar with no selection, hiding');
-          this.lastSelectedText = '';
+          this.log("Clicked outside toolbar with no selection, hiding");
+          this.lastSelectedText = "";
           this.hideSelectionToolbar();
         } else {
-          this.log('Clicked outside but text still selected, keeping toolbar');
+          this.log("Clicked outside but text still selected, keeping toolbar");
         }
       }, 100);
     }
@@ -753,46 +1002,52 @@ class XIntegration {
 
   isInteractingWithToolbar(target) {
     if (!this.currentToolbar) return false;
-    
+
     // Check if the target is within the toolbar
-    return this.currentToolbar.contains(target) || 
-           target.closest('.humanreplies-selection-toolbar-compact') ||
-           target.closest('.humanreplies-selection-toolbar-expanded') ||
-           target.classList.contains('humanreplies-selection-toolbar-compact') ||
-           target.classList.contains('humanreplies-selection-toolbar-expanded');
+    return (
+      this.currentToolbar.contains(target) ||
+      target.closest(".humanreplies-selection-toolbar-compact") ||
+      target.closest(".humanreplies-selection-toolbar-expanded") ||
+      target.classList.contains("humanreplies-selection-toolbar-compact") ||
+      target.classList.contains("humanreplies-selection-toolbar-expanded")
+    );
   }
 
   showSelectionToolbar(selection, selectedText) {
     // Don't show if we already have a toolbar for the same text
     if (this.currentToolbar && this.lastSelectedText === selectedText) {
-      this.log('Toolbar already showing for this selection');
+      this.log("Toolbar already showing for this selection");
       return;
     }
-    
+
     // Hide existing toolbar
     this.hideSelectionToolbar();
-    
+
     try {
       // Get selection bounds
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      
+
       // Check if selection is valid and visible
       if (rect.width === 0 && rect.height === 0) {
-        this.log('Selection has no visible bounds, skipping');
+        this.log("Selection has no visible bounds, skipping");
         return;
       }
-      
+
       // Create compact toolbar first
-      this.currentToolbar = this.createCompactToolbar(selectedText, null, selection);
-      
+      this.currentToolbar = this.createCompactToolbar(
+        selectedText,
+        null,
+        selection
+      );
+
       // Position toolbar above selection
       const toolbarHeight = 40;
       const toolbarWidth = 120;
-      
+
       let top = rect.top + window.scrollY - toolbarHeight - 10;
-      let left = rect.left + window.scrollX + (rect.width / 2) - (toolbarWidth / 2);
-      
+      let left = rect.left + window.scrollX + rect.width / 2 - toolbarWidth / 2;
+
       // Keep toolbar on screen
       if (left < 10) left = 10;
       if (left + toolbarWidth > window.innerWidth - 10) {
@@ -801,25 +1056,24 @@ class XIntegration {
       if (top < 10) {
         top = rect.bottom + window.scrollY + 10; // Show below if no room above
       }
-      
-      this.currentToolbar.style.top = top + 'px';
-      this.currentToolbar.style.left = left + 'px';
-      
+
+      this.currentToolbar.style.top = top + "px";
+      this.currentToolbar.style.left = left + "px";
+
       document.body.appendChild(this.currentToolbar);
-      
-      this.log('Toolbar created and positioned');
-      
+
+      this.log("Toolbar created and positioned");
+
       // Animate in
       requestAnimationFrame(() => {
         if (this.currentToolbar) {
-          this.currentToolbar.style.opacity = '1';
-          this.currentToolbar.style.transform = 'translateY(0) scale(1)';
+          this.currentToolbar.style.opacity = "1";
+          this.currentToolbar.style.transform = "translateY(0) scale(1)";
         }
       });
-      
     } catch (error) {
       this.log(`Error showing toolbar: ${error.message}`);
-      console.error('Error showing selection toolbar:', error);
+      console.error("Error showing selection toolbar:", error);
     }
   }
 
@@ -827,29 +1081,33 @@ class XIntegration {
     // Walk up the DOM to find a text area
     let current = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     let depth = 0;
-    
+
     while (current && depth < 10) {
-      if (current.contentEditable === 'true' || 
-          current.tagName === 'TEXTAREA' ||
-          current.matches('[data-testid="tweetTextarea_0"]') ||
-          current.matches('[role="textbox"]')) {
+      if (
+        current.contentEditable === "true" ||
+        current.tagName === "TEXTAREA" ||
+        current.matches('[data-testid="tweetTextarea_0"]') ||
+        current.matches('[role="textbox"]')
+      ) {
         return current;
       }
       current = current.parentElement;
       depth++;
     }
-    
+
     return null;
   }
 
   createCompactToolbar(selectedText, textArea, selection) {
-    const toolbar = document.createElement('div');
-    toolbar.className = 'humanreplies-selection-toolbar-compact';
-    
+    const toolbar = document.createElement("div");
+    toolbar.className = "humanreplies-selection-toolbar-compact";
+
     // Theme-aware colors
-    const bgColor = this.isDarkMode ? '#1d9bf0' : '#2c3e50';
-    const shadowColor = this.isDarkMode ? 'rgba(29, 155, 240, 0.3)' : 'rgba(44, 62, 80, 0.3)';
-    
+    const bgColor = this.isDarkMode ? "#1d9bf0" : "#2c3e50";
+    const shadowColor = this.isDarkMode
+      ? "rgba(29, 155, 240, 0.3)"
+      : "rgba(44, 62, 80, 0.3)";
+
     toolbar.style.cssText = `
       position: absolute;
       background: ${bgColor};
@@ -865,9 +1123,9 @@ class XIntegration {
       align-items: center;
       gap: 8px;
     `;
-    
+
     // AI Icon button
-    const aiButton = document.createElement('button');
+    const aiButton = document.createElement("button");
     aiButton.style.cssText = `
       background: transparent;
       border: none;
@@ -883,63 +1141,67 @@ class XIntegration {
       width: 24px;
       height: 24px;
     `;
-    aiButton.innerHTML = '✨';
-    
+    aiButton.innerHTML = "✨";
+
     // Label
-    const label = document.createElement('span');
+    const label = document.createElement("span");
     label.style.cssText = `
       color: white;
       font-size: 13px;
       font-weight: 500;
     `;
-    label.textContent = 'AI';
-    
-    aiButton.addEventListener('mouseenter', () => {
-      aiButton.style.background = 'rgba(255, 255, 255, 0.1)';
+    label.textContent = "AI";
+
+    aiButton.addEventListener("mouseenter", () => {
+      aiButton.style.background = "rgba(255, 255, 255, 0.1)";
     });
-    
-    aiButton.addEventListener('mouseleave', () => {
-      aiButton.style.background = 'transparent';
+
+    aiButton.addEventListener("mouseleave", () => {
+      aiButton.style.background = "transparent";
     });
-    
-    aiButton.addEventListener('click', (e) => {
+
+    aiButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      this.log('AI button clicked, expanding toolbar');
+      this.log("AI button clicked, expanding toolbar");
       this.expandToolbar(selectedText, textArea, selection);
     });
-    
+
     toolbar.appendChild(aiButton);
     toolbar.appendChild(label);
-    
+
     return toolbar;
   }
 
   expandToolbar(selectedText, textArea, selection) {
     if (!this.currentToolbar) {
-      this.log('No current toolbar to expand');
+      this.log("No current toolbar to expand");
       return;
     }
-    
-    this.log('Expanding toolbar...');
-    
+
+    this.log("Expanding toolbar...");
+
     // Get current position
     const currentRect = this.currentToolbar.getBoundingClientRect();
-    
+
     // Store the current toolbar reference
     const oldToolbar = this.currentToolbar;
-    
+
     // Create expanded toolbar
-    this.currentToolbar = this.createExpandedToolbar(selectedText, textArea, selection);
-    
+    this.currentToolbar = this.createExpandedToolbar(
+      selectedText,
+      textArea,
+      selection
+    );
+
     // Position expanded toolbar
     const toolbarHeight = 280;
     const toolbarWidth = 320;
-    
+
     let top = currentRect.top + window.scrollY - toolbarHeight + 40;
-    let left = currentRect.left + window.scrollX - (toolbarWidth / 2) + 60;
-    
+    let left = currentRect.left + window.scrollX - toolbarWidth / 2 + 60;
+
     // Keep toolbar on screen
     if (left < 10) left = 10;
     if (left + toolbarWidth > window.innerWidth - 10) {
@@ -948,37 +1210,39 @@ class XIntegration {
     if (top < 10) {
       top = currentRect.bottom + window.scrollY + 10;
     }
-    
-    this.currentToolbar.style.top = top + 'px';
-    this.currentToolbar.style.left = left + 'px';
-    
+
+    this.currentToolbar.style.top = top + "px";
+    this.currentToolbar.style.left = left + "px";
+
     document.body.appendChild(this.currentToolbar);
-    
+
     // Remove old toolbar after adding new one
     if (oldToolbar && oldToolbar.parentElement) {
       oldToolbar.parentElement.removeChild(oldToolbar);
     }
-    
+
     // Animate in
     requestAnimationFrame(() => {
       if (this.currentToolbar) {
-        this.currentToolbar.style.opacity = '1';
-        this.currentToolbar.style.transform = 'translateY(0) scale(1)';
+        this.currentToolbar.style.opacity = "1";
+        this.currentToolbar.style.transform = "translateY(0) scale(1)";
       }
     });
-    
-    this.log('Toolbar expanded successfully');
+
+    this.log("Toolbar expanded successfully");
   }
 
   createExpandedToolbar(selectedText, textArea, selection) {
-    const toolbar = document.createElement('div');
-    toolbar.className = 'humanreplies-selection-toolbar-expanded';
+    const toolbar = document.createElement("div");
+    toolbar.className = "humanreplies-selection-toolbar-expanded";
     // Theme-aware colors
-    const bgColor = this.isDarkMode ? '#15202b' : 'white';
-    const borderColor = this.isDarkMode ? '#38444d' : '#e1e8ed';
-    const textColor = this.isDarkMode ? 'white' : '#2c3e50';
-    const shadowColor = this.isDarkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.15)';
-    
+    const bgColor = this.isDarkMode ? "#15202b" : "white";
+    const borderColor = this.isDarkMode ? "#38444d" : "#e1e8ed";
+    const textColor = this.isDarkMode ? "white" : "#2c3e50";
+    const shadowColor = this.isDarkMode
+      ? "rgba(0, 0, 0, 0.3)"
+      : "rgba(0, 0, 0, 0.15)";
+
     toolbar.style.cssText = `
       position: absolute;
       background: ${bgColor};
@@ -994,9 +1258,9 @@ class XIntegration {
       min-width: 320px;
       color: ${textColor};
     `;
-    
+
     // Close button (top right corner)
-    const closeButton = document.createElement('button');
+    const closeButton = document.createElement("button");
     closeButton.style.cssText = `
       position: absolute;
       top: 8px;
@@ -1011,67 +1275,67 @@ class XIntegration {
       transition: all 0.2s ease;
       z-index: 1;
     `;
-    closeButton.innerHTML = '×';
-    closeButton.addEventListener('click', (e) => {
+    closeButton.innerHTML = "×";
+    closeButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      this.log('Close button clicked');
+      this.log("Close button clicked");
       this.hideSelectionToolbar();
     });
-    
+
     toolbar.appendChild(closeButton);
-    
+
     // Options
     const options = [
       {
-        icon: '✨',
-        text: 'Improve writing',
-        action: 'improve',
-        description: 'Make the text clearer and more engaging'
+        icon: "✨",
+        text: "Improve writing",
+        action: "improve",
+        description: "Make the text clearer and more engaging",
       },
       {
-        icon: '✓',
-        text: 'Check spelling & grammar',
-        action: 'grammar',
-        description: 'Fix spelling and grammar issues'
+        icon: "✓",
+        text: "Check spelling & grammar",
+        action: "grammar",
+        description: "Fix spelling and grammar issues",
       },
       {
-        icon: '—',
-        text: 'Make shorter',
-        action: 'shorter',
-        description: 'Condense the text while keeping the meaning'
+        icon: "—",
+        text: "Make shorter",
+        action: "shorter",
+        description: "Condense the text while keeping the meaning",
       },
       {
-        icon: '≡',
-        text: 'Make longer',
-        action: 'longer',
-        description: 'Expand the text with more detail'
+        icon: "≡",
+        text: "Make longer",
+        action: "longer",
+        description: "Expand the text with more detail",
       },
       {
-        icon: '✦',
-        text: 'Simplify language',
-        action: 'simplify',
-        description: 'Use simpler, clearer language'
+        icon: "✦",
+        text: "Simplify language",
+        action: "simplify",
+        description: "Use simpler, clearer language",
       },
       {
-        icon: '🎭',
-        text: 'Change tone',
-        action: 'tone',
-        description: 'Adjust the tone and style',
+        icon: "🎭",
+        text: "Change tone",
+        action: "tone",
+        description: "Adjust the tone and style",
         hasSubmenu: true,
         submenu: [
-          { icon: '👍', text: 'Neutral', action: 'tone-neutral' },
-          { icon: '😂', text: 'Joke', action: 'tone-joke' },
-          { icon: '❤️', text: 'Support', action: 'tone-support' },
-          { icon: '💡', text: 'Idea', action: 'tone-idea' },
-          { icon: '❓', text: 'Question', action: 'tone-question' }
-        ]
-      }
+          { icon: "👍", text: "Neutral", action: "tone-neutral" },
+          { icon: "😂", text: "Joke", action: "tone-joke" },
+          { icon: "❤️", text: "Support", action: "tone-support" },
+          { icon: "💡", text: "Idea", action: "tone-idea" },
+          { icon: "❓", text: "Question", action: "tone-question" },
+        ],
+      },
     ];
-    
-    options.forEach(option => {
-      const button = document.createElement('button');
+
+    options.forEach((option) => {
+      const button = document.createElement("button");
       button.style.cssText = `
         display: flex;
         align-items: center;
@@ -1089,46 +1353,66 @@ class XIntegration {
         text-align: left;
         position: relative;
       `;
-      
+
       button.innerHTML = `
         <span style="margin-right: 12px; font-size: 16px;">${option.icon}</span>
         <span>${option.text}</span>
-        ${option.hasSubmenu ? '<span style="margin-left: auto; font-size: 12px; color: #7f8c8d;">▶</span>' : ''}
+        ${
+          option.hasSubmenu
+            ? '<span style="margin-left: auto; font-size: 12px; color: #7f8c8d;">▶</span>'
+            : ""
+        }
       `;
-      
-      button.addEventListener('mouseenter', () => {
-        button.style.background = '#f5f3f0';
+
+      button.addEventListener("mouseenter", () => {
+        button.style.background = "#f5f3f0";
       });
-      
-      button.addEventListener('mouseleave', () => {
-        button.style.background = 'transparent';
+
+      button.addEventListener("mouseleave", () => {
+        button.style.background = "transparent";
       });
-      
-      button.addEventListener('click', (e) => {
+
+      button.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         this.log(`Selection action clicked: ${option.action}`);
-        
+
         if (option.hasSubmenu) {
-          this.showToneSubmenu(button, option.submenu, selectedText, textArea, selection);
+          this.showToneSubmenu(
+            button,
+            option.submenu,
+            selectedText,
+            textArea,
+            selection
+          );
         } else {
-          this.handleSelectionAction(option.action, selectedText, textArea, selection);
+          this.handleSelectionAction(
+            option.action,
+            selectedText,
+            textArea,
+            selection
+          );
         }
       });
-      
+
       toolbar.appendChild(button);
     });
-    
+
     return toolbar;
   }
 
   async handleSelectionAction(action, selectedText, textArea, selection) {
-    this.log(`Handling selection action: ${action} for text: "${selectedText.substring(0, 30)}..."`);
-    
+    this.log(
+      `Handling selection action: ${action} for text: "${selectedText.substring(
+        0,
+        30
+      )}..."`
+    );
+
     // Show loading state
     if (this.currentToolbar) {
-      const loadingDiv = document.createElement('div');
+      const loadingDiv = document.createElement("div");
       loadingDiv.style.cssText = `
         position: absolute;
         top: 0;
@@ -1143,30 +1427,29 @@ class XIntegration {
         font-size: 14px;
         color: #2c3e50;
       `;
-      loadingDiv.innerHTML = '⏳ Processing...';
+      loadingDiv.innerHTML = "⏳ Processing...";
       this.currentToolbar.appendChild(loadingDiv);
     }
-    
+
     try {
       const prompt = this.buildSelectionPrompt(action, selectedText);
       const result = await this.apiService.generateReply(prompt, {
-        platform: 'x',
-        tone: 'helpful'
+        platform: "x",
+        tone: "helpful",
       });
-      
+
       // Replace selected text with improved version
       this.replaceSelectedText(selection, result.reply, textArea);
       this.hideSelectionToolbar();
-      
     } catch (error) {
       this.log(`Selection action failed: ${error.message}`);
-      console.error('Selection action failed:', error);
-      
+      console.error("Selection action failed:", error);
+
       // Show error briefly
       if (this.currentToolbar) {
-        const errorDiv = this.currentToolbar.querySelector('div:last-child');
+        const errorDiv = this.currentToolbar.querySelector("div:last-child");
         if (errorDiv) {
-          errorDiv.innerHTML = '❌ Error occurred';
+          errorDiv.innerHTML = "❌ Error occurred";
           setTimeout(() => this.hideSelectionToolbar(), 2000);
         }
       }
@@ -1180,25 +1463,33 @@ class XIntegration {
       shorter: `Make this text shorter while keeping the same meaning: "${selectedText}"`,
       longer: `Expand this text with more detail and context: "${selectedText}"`,
       simplify: `Rewrite this text using simpler, clearer language: "${selectedText}"`,
-      'tone-neutral': `Rewrite this text with a neutral, balanced tone: "${selectedText}"`,
-      'tone-joke': `Rewrite this text to be funny and humorous while keeping the main message: "${selectedText}"`,
-      'tone-support': `Rewrite this text to be supportive, encouraging, and empathetic: "${selectedText}"`,
-      'tone-idea': `Rewrite this text to present it as an innovative idea or suggestion: "${selectedText}"`,
-      'tone-question': `Rewrite this text as a thoughtful question to encourage discussion: "${selectedText}"`
+      "tone-neutral": `Rewrite this text with a neutral, balanced tone: "${selectedText}"`,
+      "tone-joke": `Rewrite this text to be funny and humorous while keeping the main message: "${selectedText}"`,
+      "tone-support": `Rewrite this text to be supportive, encouraging, and empathetic: "${selectedText}"`,
+      "tone-idea": `Rewrite this text to present it as an innovative idea or suggestion: "${selectedText}"`,
+      "tone-question": `Rewrite this text as a thoughtful question to encourage discussion: "${selectedText}"`,
     };
-    
+
     return prompts[action] || prompts.improve;
   }
 
-  showToneSubmenu(parentButton, submenuOptions, selectedText, textArea, selection) {
+  showToneSubmenu(
+    parentButton,
+    submenuOptions,
+    selectedText,
+    textArea,
+    selection
+  ) {
     // Remove any existing submenu
-    const existingSubmenu = document.querySelector('.humanreplies-tone-submenu');
+    const existingSubmenu = document.querySelector(
+      ".humanreplies-tone-submenu"
+    );
     if (existingSubmenu) {
       existingSubmenu.remove();
     }
 
-    const submenu = document.createElement('div');
-    submenu.className = 'humanreplies-tone-submenu';
+    const submenu = document.createElement("div");
+    submenu.className = "humanreplies-tone-submenu";
     submenu.style.cssText = `
       position: absolute;
       left: 100%;
@@ -1213,8 +1504,8 @@ class XIntegration {
       margin-left: 8px;
     `;
 
-    submenuOptions.forEach(option => {
-      const submenuButton = document.createElement('button');
+    submenuOptions.forEach((option) => {
+      const submenuButton = document.createElement("button");
       submenuButton.style.cssText = `
         display: flex;
         align-items: center;
@@ -1237,20 +1528,25 @@ class XIntegration {
         <span>${option.text}</span>
       `;
 
-      submenuButton.addEventListener('mouseenter', () => {
-        submenuButton.style.background = '#f5f3f0';
+      submenuButton.addEventListener("mouseenter", () => {
+        submenuButton.style.background = "#f5f3f0";
       });
 
-      submenuButton.addEventListener('mouseleave', () => {
-        submenuButton.style.background = 'transparent';
+      submenuButton.addEventListener("mouseleave", () => {
+        submenuButton.style.background = "transparent";
       });
 
-      submenuButton.addEventListener('click', (e) => {
+      submenuButton.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         this.log(`Tone submenu clicked: ${option.action}`);
-        this.handleSelectionAction(option.action, selectedText, textArea, selection);
+        this.handleSelectionAction(
+          option.action,
+          selectedText,
+          textArea,
+          selection
+        );
         submenu.remove();
       });
 
@@ -1264,10 +1560,10 @@ class XIntegration {
       const removeSubmenu = (e) => {
         if (!submenu.contains(e.target) && !parentButton.contains(e.target)) {
           submenu.remove();
-          document.removeEventListener('click', removeSubmenu);
+          document.removeEventListener("click", removeSubmenu);
         }
       };
-      document.addEventListener('click', removeSubmenu);
+      document.addEventListener("click", removeSubmenu);
     }, 100);
   }
 
@@ -1277,31 +1573,31 @@ class XIntegration {
         const range = selection.getRangeAt(0);
         range.deleteContents();
         range.insertNode(document.createTextNode(newText));
-        
+
         // Clear selection
         selection.removeAllRanges();
-        
+
         // Trigger input events
-        const events = ['input', 'change', 'keyup'];
-        events.forEach(eventType => {
+        const events = ["input", "change", "keyup"];
+        events.forEach((eventType) => {
           textArea.dispatchEvent(new Event(eventType, { bubbles: true }));
         });
-        
-        this.log('Text replaced successfully');
+
+        this.log("Text replaced successfully");
       }
     } catch (error) {
       this.log(`Error replacing text: ${error.message}`);
-      console.error('Error replacing text:', error);
+      console.error("Error replacing text:", error);
     }
   }
 
   hideSelectionToolbar() {
     if (this.currentToolbar) {
-      this.log('Hiding selection toolbar');
-      
-      this.currentToolbar.style.opacity = '0';
-      this.currentToolbar.style.transform = 'translateY(-10px) scale(0.95)';
-      
+      this.log("Hiding selection toolbar");
+
+      this.currentToolbar.style.opacity = "0";
+      this.currentToolbar.style.transform = "translateY(-10px) scale(0.95)";
+
       setTimeout(() => {
         if (this.currentToolbar && this.currentToolbar.parentElement) {
           this.currentToolbar.parentElement.removeChild(this.currentToolbar);
@@ -1313,61 +1609,62 @@ class XIntegration {
 
   // Reply Tone Menu
   async showReplyToneMenu(button, textarea) {
-    this.log('showReplyToneMenu called');
-    
-    try {
-      // Check if user has a saved preference
-      const savedTone = await this.getSavedReplyTone();
-      this.log(`Saved tone: ${savedTone}`);
-      
-      if (savedTone && savedTone !== 'ask') {
-        // Auto-generate with saved tone
-        this.log(`Using saved tone: ${savedTone}`);
-        this.handleReplyGeneration(button, textarea, savedTone);
-        return;
-      }
+    this.log("showReplyToneMenu called");
 
-      // Show tone selection menu
-      this.log('Creating tone menu');
+    try {
+      // Always show tone selection menu regardless of saved preference
+      this.log("Creating tone menu (forced)");
       this.createReplyToneMenu(button, textarea);
     } catch (error) {
       this.log(`Error in showReplyToneMenu: ${error.message}`);
       // Fallback to neutral tone
-      this.handleReplyGeneration(button, textarea, 'neutral');
+      this.handleReplyGeneration(button, textarea, "neutral");
     }
   }
 
   createReplyToneMenu(button, textarea) {
+    this.log("=== CREATING REPLY TONE MENU ===");
+
     // Remove any existing menu
-    const existingMenu = document.querySelector('.humanreplies-reply-tone-menu');
+    const existingMenu = document.querySelector(
+      ".humanreplies-reply-tone-menu"
+    );
     if (existingMenu) {
+      this.log("Removing existing menu");
       existingMenu.remove();
     }
 
-    const menu = document.createElement('div');
-    menu.className = 'humanreplies-reply-tone-menu';
+    const menu = document.createElement("div");
+    menu.className = "humanreplies-reply-tone-menu";
+
     // Theme-aware colors
-    const bgColor = this.isDarkMode ? '#15202b' : 'white';
-    const textColor = this.isDarkMode ? 'white' : '#2c3e50';
-    const shadowColor = this.isDarkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.15)';
-    
+    const bgColor = this.isDarkMode ? "#15202b" : "white";
+    const textColor = this.isDarkMode ? "white" : "#2c3e50";
+    const shadowColor = this.isDarkMode
+      ? "rgba(0, 0, 0, 0.3)"
+      : "rgba(0, 0, 0, 0.15)";
+
     menu.style.cssText = `
-      position: absolute;
-      background: ${bgColor};
-      border: none;
-      border-radius: 12px;
-      box-shadow: 0 8px 24px ${shadowColor};
-      padding: 12px;
-      z-index: 10000;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-width: 200px;
-      user-select: none;
-      pointer-events: auto;
-      color: ${textColor};
+      position: absolute !important;
+      background: ${bgColor} !important;
+      border: none !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 24px ${shadowColor} !important;
+      padding: 12px !important;
+      z-index: 10000 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      min-width: 200px !important;
+      user-select: none !important;
+      pointer-events: auto !important;
+      color: ${textColor} !important;
+      opacity: 1 !important;
+      display: block !important;
+      transform: translateY(0) scale(1) !important;
+      transition: all 0.2s ease !important;
     `;
 
     // Header
-    const header = document.createElement('div');
+    const header = document.createElement("div");
     header.style.cssText = `
       font-size: 13px;
       font-weight: 600;
@@ -1375,20 +1672,21 @@ class XIntegration {
       margin-bottom: 8px;
       text-align: center;
     `;
-    header.textContent = 'Choose Reply Tone';
+    header.textContent = "Choose Reply Tone";
     menu.appendChild(header);
+    this.log("Header added to menu");
 
     // Tone options
     const toneOptions = [
-      { icon: '👍', text: 'Neutral', value: 'neutral' },
-      { icon: '😂', text: 'Joke', value: 'joke' },
-      { icon: '❤️', text: 'Support', value: 'support' },
-      { icon: '💡', text: 'Idea', value: 'idea' },
-      { icon: '❓', text: 'Question', value: 'question' }
+      { icon: "👍", text: "Neutral", value: "neutral" },
+      { icon: "😂", text: "Joke", value: "joke" },
+      { icon: "❤️", text: "Support", value: "support" },
+      { icon: "💡", text: "Idea", value: "idea" },
+      { icon: "❓", text: "Question", value: "question" },
     ];
 
-    toneOptions.forEach(option => {
-      const toneButton = document.createElement('button');
+    toneOptions.forEach((option) => {
+      const toneButton = document.createElement("button");
       toneButton.style.cssText = `
         display: flex;
         align-items: center;
@@ -1411,15 +1709,15 @@ class XIntegration {
         <span>${option.text}</span>
       `;
 
-      toneButton.addEventListener('mouseenter', () => {
-        toneButton.style.background = '#f5f3f0';
+      toneButton.addEventListener("mouseenter", () => {
+        toneButton.style.background = "#f5f3f0";
       });
 
-      toneButton.addEventListener('mouseleave', () => {
-        toneButton.style.background = 'transparent';
+      toneButton.addEventListener("mouseleave", () => {
+        toneButton.style.background = "transparent";
       });
 
-      toneButton.addEventListener('click', (e) => {
+      toneButton.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         this.log(`Reply tone selected: ${option.value}`);
@@ -1428,10 +1726,12 @@ class XIntegration {
       });
 
       menu.appendChild(toneButton);
+      this.log(`Added tone button: ${option.text}`);
     });
+    this.log(`Total tone buttons created: ${toneOptions.length}`);
 
     // Separator
-    const separator = document.createElement('div');
+    const separator = document.createElement("div");
     separator.style.cssText = `
       height: 1px;
       background: #f0f0f0;
@@ -1440,7 +1740,7 @@ class XIntegration {
     menu.appendChild(separator);
 
     // Settings section
-    const settingsHeader = document.createElement('div');
+    const settingsHeader = document.createElement("div");
     settingsHeader.style.cssText = `
       font-size: 11px;
       font-weight: 600;
@@ -1449,11 +1749,11 @@ class XIntegration {
       text-transform: uppercase;
       letter-spacing: 0.5px;
     `;
-    settingsHeader.textContent = 'Settings';
+    settingsHeader.textContent = "Settings";
     menu.appendChild(settingsHeader);
 
     // Remember choice dropdown
-    const rememberContainer = document.createElement('div');
+    const rememberContainer = document.createElement("div");
     rememberContainer.style.cssText = `
       display: flex;
       align-items: center;
@@ -1461,15 +1761,15 @@ class XIntegration {
       padding: 6px 0;
     `;
 
-    const rememberLabel = document.createElement('span');
+    const rememberLabel = document.createElement("span");
     rememberLabel.style.cssText = `
       font-size: 12px;
       color: #2c3e50;
       flex: 1;
     `;
-    rememberLabel.textContent = 'Remember choice:';
+    rememberLabel.textContent = "Remember choice:";
 
-    const rememberSelect = document.createElement('select');
+    const rememberSelect = document.createElement("select");
     rememberSelect.style.cssText = `
       padding: 4px 8px;
       border: 1px solid #e1e8ed;
@@ -1481,27 +1781,27 @@ class XIntegration {
     `;
 
     const rememberOptions = [
-      { value: 'ask', text: 'Always ask' },
-      { value: 'neutral', text: '👍 Neutral' },
-      { value: 'joke', text: '😂 Joke' },
-      { value: 'support', text: '❤️ Support' },
-      { value: 'idea', text: '💡 Idea' },
-      { value: 'question', text: '❓ Question' }
+      { value: "ask", text: "Always ask" },
+      { value: "neutral", text: "👍 Neutral" },
+      { value: "joke", text: "😂 Joke" },
+      { value: "support", text: "❤️ Support" },
+      { value: "idea", text: "💡 Idea" },
+      { value: "question", text: "❓ Question" },
     ];
 
-    rememberOptions.forEach(option => {
-      const optionElement = document.createElement('option');
+    rememberOptions.forEach((option) => {
+      const optionElement = document.createElement("option");
       optionElement.value = option.value;
       optionElement.textContent = option.text;
       rememberSelect.appendChild(optionElement);
     });
 
     // Load current setting
-    this.getSavedReplyTone().then(savedTone => {
-      rememberSelect.value = savedTone || 'ask';
+    this.getSavedReplyTone().then((savedTone) => {
+      rememberSelect.value = savedTone || "ask";
     });
 
-    rememberSelect.addEventListener('change', (e) => {
+    rememberSelect.addEventListener("change", (e) => {
       this.saveReplyTone(e.target.value);
       this.log(`Reply tone preference saved: ${e.target.value}`);
     });
@@ -1510,52 +1810,77 @@ class XIntegration {
     rememberContainer.appendChild(rememberSelect);
     menu.appendChild(rememberContainer);
 
-    // Position menu
+    // Position menu directly below button
     const buttonRect = button.getBoundingClientRect();
-    let top = buttonRect.bottom + window.scrollY + 5;
+    let top = buttonRect.bottom + window.scrollY + 8;
     let left = buttonRect.left + window.scrollX;
 
     // Keep menu on screen
     if (left + 200 > window.innerWidth - 10) {
-      left = window.innerWidth - 210;
+      left = buttonRect.right + window.scrollX - 200;
     }
     if (top + 300 > window.innerHeight + window.scrollY - 10) {
       top = buttonRect.top + window.scrollY - 300;
     }
 
-    menu.style.top = top + 'px';
-    menu.style.left = left + 'px';
+    menu.style.top = top + "px";
+    menu.style.left = left + "px";
+
+    this.log(
+      `Button rect: top=${buttonRect.top}, left=${buttonRect.left}, bottom=${buttonRect.bottom}, right=${buttonRect.right}`
+    );
+    this.log(`Menu positioned at top: ${top}px, left: ${left}px`);
+
+    this.log(`Menu children count before append: ${menu.children.length}`);
+    this.log(`Menu innerHTML before append:`, menu.innerHTML.substring(0, 100));
 
     document.body.appendChild(menu);
+    this.log(`Menu created and positioned at top: ${top}px, left: ${left}px`);
+    this.log(`Menu children count after append: ${menu.children.length}`);
+    this.log(
+      `Total menus in DOM:`,
+      document.querySelectorAll(".humanreplies-reply-tone-menu").length
+    );
 
     // Animate in
     requestAnimationFrame(() => {
-      menu.style.opacity = '1';
-      menu.style.transform = 'translateY(0) scale(1)';
+      if (menu && menu.parentElement) {
+        menu.style.opacity = "1";
+        menu.style.transform = "translateY(0) scale(1)";
+        this.log("Menu animation triggered");
+        this.log(`Menu opacity after animation:`, menu.style.opacity);
+        this.log(`Menu visibility:`, window.getComputedStyle(menu).visibility);
+      } else {
+        this.log("Menu not found in DOM for animation");
+      }
     });
 
-    // Close menu when clicking outside
+    // Close menu when clicking outside (with longer delay to prevent immediate close)
     setTimeout(() => {
       const closeMenu = (e) => {
         if (!menu.contains(e.target) && !button.contains(e.target)) {
+          this.log("Closing menu due to outside click");
           menu.remove();
-          document.removeEventListener('click', closeMenu);
+          document.removeEventListener("click", closeMenu);
+        } else {
+          this.log("Click inside menu or button, keeping menu open");
         }
       };
-      document.addEventListener('click', closeMenu);
-    }, 100);
+      document.addEventListener("click", closeMenu);
+      this.log("Close menu handler added");
+    }, 500); // Increased delay from 100ms to 500ms
   }
 
   async getSavedReplyTone() {
     try {
       return new Promise((resolve) => {
-        chrome.storage.sync.get(['replyTone'], (result) => {
-          resolve(result.replyTone || 'ask');
+        chrome.storage.sync.get(["replyTone"], (result) => {
+          resolve(result.replyTone || "ask");
         });
       });
     } catch (error) {
       this.log(`Error getting saved tone: ${error.message}`);
-      return 'ask';
+      return "ask";
     }
   }
 
@@ -1570,8 +1895,8 @@ class XIntegration {
 }
 
 // Initialize when page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
     new XIntegration();
   });
 } else {
