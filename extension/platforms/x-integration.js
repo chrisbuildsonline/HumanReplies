@@ -1,6 +1,36 @@
 // X (Twitter) platform integration for HumanReplies
 
 class XIntegration {
+  // Restored: Observe page changes for dynamic content injection
+  observePageChanges() {
+    // Watch for dynamic content changes on X
+    const observer = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
+
+      mutations.forEach((mutation) => {
+        if (mutation.addedNodes.length > 0) {
+          mutation.addedNodes.forEach((node) => {
+            if (
+              node.nodeType === 1 &&
+              (node.querySelector && node.querySelector('[data-testid="tweetTextarea_0"]') ||
+                node.matches && node.matches('[data-testid="tweetTextarea_0"]'))
+            ) {
+              shouldUpdate = true;
+            }
+          });
+        }
+      });
+
+      if (shouldUpdate) {
+        setTimeout(() => this.addReplyButtons(), 500);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
   constructor() {
     this.apiService = new HumanRepliesAPI();
     this.debugMode = true; // Enable debugging
@@ -703,7 +733,7 @@ class XIntegration {
 
     try {
       if (textarea.tagName === "TEXTAREA") {
-        // Standard textarea
+        // Standard textarea - clear and set new value
         textarea.value = reply;
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
         textarea.dispatchEvent(new Event("change", { bubbles: true }));
@@ -720,6 +750,9 @@ class XIntegration {
           try {
             textarea.focus();
             this.log("Textarea focused, attempting paste simulation");
+            
+            // Clear existing content first
+            this.clearTextareaContent(textarea);
             
             // Create a paste event with clipboard data
             const pasteEvent = new ClipboardEvent('paste', {
@@ -778,6 +811,9 @@ class XIntegration {
           if (!success) {
             this.log("Attempting direct Draft.js DOM manipulation");
             
+            // Clear existing content first
+            this.clearTextareaContent(textarea);
+            
             // Look for the exact structure we saw in the HTML
             const contentsDiv = textarea.querySelector('div[data-contents="true"]');
             if (contentsDiv) {
@@ -818,7 +854,11 @@ class XIntegration {
           // Method 3: Direct content replacement as fallback
           if (!success) {
             this.log("Using direct content replacement fallback");
-            textarea.textContent = reply;
+            // Clear first, then set new content
+            this.clearTextareaContent(textarea);
+            setTimeout(() => {
+              textarea.textContent = reply;
+            }, 50);
             success = true;
           }
 
@@ -855,6 +895,68 @@ class XIntegration {
     } catch (error) {
       this.log(`Error inserting reply: ${error.message}`);
       console.error("Error inserting reply:", error);
+    }
+  }
+
+  clearTextareaContent(textarea) {
+    this.log("Clearing existing textarea content");
+    
+    try {
+      // For standard textarea
+      if (textarea.tagName === "TEXTAREA") {
+        textarea.value = "";
+        return;
+      }
+      
+      // For Draft.js editor - try multiple clearing methods
+      
+      // Method 1: Clear via execCommand (most compatible)
+      try {
+        textarea.focus();
+        document.execCommand('selectAll');
+        document.execCommand('delete');
+        this.log("Cleared content using execCommand");
+      } catch (error) {
+        this.log(`execCommand clear failed: ${error.message}`);
+      }
+      
+      // Method 2: Clear Draft.js DOM structure
+      const contentsDiv = textarea.querySelector('div[data-contents="true"]');
+      if (contentsDiv) {
+        // Create empty block structure
+        const editorId = textarea.getAttribute('aria-describedby') || 'editor';
+        const offsetKey = `${editorId.replace('placeholder-', '')}-0-0`;
+        
+        const emptyBlock = `
+          <div class="" data-block="true" data-editor="${editorId.replace('placeholder-', '')}" data-offset-key="${offsetKey}">
+            <div data-offset-key="${offsetKey}" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr">
+              <span data-offset-key="${offsetKey}">
+                <span data-text="true"></span>
+              </span>
+            </div>
+          </div>
+        `;
+        
+        contentsDiv.innerHTML = emptyBlock;
+        this.log("Cleared content using Draft.js DOM manipulation");
+      }
+      
+      // Method 3: Fallback - clear textContent
+      textarea.textContent = "";
+      textarea.innerText = "";
+      
+      // Trigger events to notify Draft.js of the change
+      const events = ["input", "change", "keyup"];
+      events.forEach((eventType) => {
+        try {
+          textarea.dispatchEvent(new Event(eventType, { bubbles: true }));
+        } catch (e) {
+          // Ignore event errors
+        }
+      });
+      
+    } catch (error) {
+      this.log(`Error clearing textarea content: ${error.message}`);
     }
   }
 
@@ -1612,9 +1714,23 @@ class XIntegration {
     this.log("showReplyToneMenu called");
 
     try {
-      // Always show tone selection menu regardless of saved preference
-      this.log("Creating tone menu (forced)");
-      this.createReplyToneMenu(button, textarea);
+      // Check if user has saved a preferred tone
+      const savedTone = await this.getSavedReplyTone();
+      this.log(`Saved tone preference: "${savedTone}" (type: ${typeof savedTone})`);
+      
+      // Debug the exact comparison
+      const shouldAutoGenerate = savedTone && savedTone !== "ask";
+      this.log(`shouldAutoGenerate: ${shouldAutoGenerate} (savedTone !== "ask": ${savedTone !== "ask"})`);
+      
+      if (shouldAutoGenerate) {
+        // Auto-generate with saved tone - skip menu
+        this.log(`Auto-generating reply with saved tone: ${savedTone}`);
+        this.handleReplyGeneration(button, textarea, savedTone);
+      } else {
+        // Show tone selection menu
+        this.log(`Showing tone selection menu - savedTone is "${savedTone}"`);
+        this.createReplyToneMenu(button, textarea);
+      }
     } catch (error) {
       this.log(`Error in showReplyToneMenu: ${error.message}`);
       // Fallback to neutral tone
@@ -1890,6 +2006,35 @@ class XIntegration {
       this.log(`Saved reply tone: ${tone}`);
     } catch (error) {
       this.log(`Error saving tone: ${error.message}`);
+    }
+  }
+
+  // Debug helper function to check and reset storage
+  async debugReplyToneStorage() {
+    try {
+      // Get current value
+      const currentValue = await this.getSavedReplyTone();
+      this.log(`DEBUG - Current stored value: "${currentValue}" (type: ${typeof currentValue})`);
+      
+      // Get raw storage value
+      chrome.storage.sync.get(['replyTone'], (result) => {
+        this.log(`DEBUG - Raw storage result:`, result);
+        this.log(`DEBUG - Raw replyTone value: "${result.replyTone}" (type: ${typeof result.replyTone})`);
+      });
+      
+      return currentValue;
+    } catch (error) {
+      this.log(`DEBUG - Error reading storage: ${error.message}`);
+    }
+  }
+
+  // Function to reset tone preference to "ask"
+  resetTonePreference() {
+    try {
+      chrome.storage.sync.set({ replyTone: "ask" });
+      this.log(`Reset reply tone preference to "ask"`);
+    } catch (error) {
+      this.log(`Error resetting tone: ${error.message}`);
     }
   }
 }

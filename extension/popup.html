@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <style>
@@ -11,13 +12,13 @@
       background: #f5f3f0;
       color: #2c3e50;
     }
-    
+
     .header {
       text-align: center;
       margin-bottom: 24px;
       padding: 16px 0;
     }
-    
+
     .logo {
       font-size: 28px;
       font-weight: 700;
@@ -26,7 +27,7 @@
       letter-spacing: -0.5px;
       line-height: 1.2;
     }
-    
+
     .title {
       font-size: 28px;
       font-weight: 700;
@@ -35,25 +36,25 @@
       letter-spacing: -0.5px;
       line-height: 1.2;
     }
-    
+
     .subtitle {
       font-size: 13px;
       color: #7f8c8d;
       margin: 6px 0 0 0;
       font-weight: 400;
     }
-    
+
     .section {
       margin-bottom: 16px;
     }
-    
+
     .section-title {
       font-size: 15px;
       font-weight: 600;
       margin-bottom: 12px;
       color: #2c3e50;
     }
-    
+
     .feature {
       display: flex;
       align-items: center;
@@ -61,21 +62,21 @@
       background: white;
       border-radius: 10px;
       margin-bottom: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       border: 1px solid #e8e5e1;
     }
-    
+
     .feature-icon {
       margin-right: 12px;
       font-size: 18px;
     }
-    
+
     .feature-text {
       font-size: 13px;
       color: #2c3e50;
       font-weight: 500;
     }
-    
+
     .status {
       display: flex;
       align-items: center;
@@ -84,23 +85,23 @@
       background: white;
       border-radius: 10px;
       margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       border: 1px solid #27ae60;
     }
-    
+
     .status-text {
       font-size: 13px;
       color: #27ae60;
       font-weight: 600;
     }
-    
+
     .status-indicator {
       width: 10px;
       height: 10px;
       background: #27ae60;
       border-radius: 50%;
     }
-    
+
     .shortcut {
       background: #f0f0f0;
       padding: 2px 6px;
@@ -109,7 +110,7 @@
       font-family: monospace;
       color: #333;
     }
-    
+
     .footer {
       text-align: center;
       font-size: 11px;
@@ -118,7 +119,7 @@
       padding-top: 16px;
       border-top: 1px solid #e8e5e1;
     }
-    
+
     .setting-item {
       display: flex;
       flex-direction: column;
@@ -126,23 +127,23 @@
       background: white;
       border-radius: 10px;
       margin-bottom: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       border: 1px solid #e8e5e1;
     }
-    
+
     .setting-label {
       font-size: 13px;
       color: #2c3e50;
       font-weight: 600;
       margin-bottom: 6px;
     }
-    
+
     .setting-description {
       font-size: 11px;
       color: #7f8c8d;
       margin-bottom: 8px;
     }
-    
+
     .setting-select {
       padding: 8px 12px;
       border: 1px solid #e8e5e1;
@@ -153,59 +154,59 @@
       cursor: pointer;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    
+
     /* Dark mode support */
     @media (prefers-color-scheme: dark) {
       body {
         background: #15202b;
         color: #ffffff;
       }
-      
+
       .title {
         color: #ffffff;
       }
-      
+
       .subtitle {
         color: #8b98a5;
       }
-      
+
       .section-title {
         color: #ffffff;
       }
-      
+
       .feature {
         background: #1e2732;
         border-color: #38444d;
       }
-      
+
       .feature-text {
         color: #ffffff;
       }
-      
+
       .status {
         background: #1e2732;
         border-color: #27ae60;
       }
-      
+
       .setting-item {
         background: #1e2732;
         border-color: #38444d;
       }
-      
+
       .setting-label {
         color: #ffffff;
       }
-      
+
       .setting-description {
         color: #8b98a5;
       }
-      
+
       .setting-select {
         background: #15202b;
         color: #ffffff;
         border-color: #38444d;
       }
-      
+
       .footer {
         color: #8b98a5;
         border-color: #38444d;
@@ -213,17 +214,18 @@
     }
   </style>
 </head>
+
 <body>
   <div class="header">
     <h1 class="title">HumanReplies</h1>
     <p class="subtitle">AI-Powered Reply Generation</p>
   </div>
-  
+
   <div class="status">
     <span class="status-text">Extension Active</span>
     <div class="status-indicator"></div>
   </div>
-  
+
   <div class="section">
     <div class="section-title">Features</div>
     <div class="feature">
@@ -240,10 +242,10 @@
     </div>
     <div class="feature">
       <span class="feature-icon">🔒</span>
-      <span class="feature-text">20 free replies daily</span>
+      <span class="feature-text">Unlimited free replies daily</span>
     </div>
   </div>
-  
+
   <div class="section">
     <div class="section-title">Settings</div>
     <div class="setting-item">
@@ -257,9 +259,12 @@
         <option value="idea">💡 Idea</option>
         <option value="question">❓ Question</option>
       </select>
+      <button class="debug-storage-btn"
+        style="margin-top: 8px; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: #f0f0f0; font-size: 11px; cursor: pointer;">Debug
+        Storage</button>
     </div>
   </div>
-  
+
   <div class="section">
     <div class="section-title">How to Use</div>
     <div class="feature">
@@ -275,27 +280,52 @@
       <span class="feature-text">Click "🧠 Generate Reply"</span>
     </div>
   </div>
-  
+
   <div class="footer">
     <p>Currently supports X (Twitter)</p>
   </div>
-  
+
   <script>
+    alert('Script is running!');
+    console.log('HumanReplies popup script started');
+
+    // Simple test function
+    function testBasicFunction() {
+      console.log('Basic function works');
+      alert('Basic function test passed!');
+    }
+
+    // Test immediately
+    testBasicFunction();
+
     // Load and save reply tone setting
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', function () {
+      console.log('DOMContentLoaded fired');
+      alert('DOM loaded!');
+
       const replyToneSelect = document.getElementById('replyToneSelect');
-      
-      // Load current setting
-      chrome.storage.sync.get(['replyTone'], (result) => {
-        replyToneSelect.value = result.replyTone || 'ask';
-      });
-      
-      // Save when changed
-      replyToneSelect.addEventListener('change', (e) => {
-        chrome.storage.sync.set({ replyTone: e.target.value });
-        console.log('Reply tone setting saved:', e.target.value);
-      });
+      console.log('Select element found:', !!replyToneSelect);
+
+      if (replyToneSelect) {
+        // Simple change handler
+        replyToneSelect.addEventListener('change', function (e) {
+          console.log('Dropdown changed to:', e.target.value);
+          alert('Dropdown changed to: ' + e.target.value);
+        });
+      }
+
+      // Simple button test
+      const debugButton = document.querySelector('.debug-storage-btn');
+      console.log('Debug button found:', !!debugButton);
+
+      if (debugButton) {
+        debugButton.onclick = function () {
+          alert('Debug button works!');
+          console.log('Debug button clicked!');
+        };
+      }
     });
   </script>
 </body>
+
 </html>
