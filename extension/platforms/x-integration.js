@@ -596,13 +596,13 @@ class XIntegration {
     try {
       this.log("Calling API service...");
 
-      // Build tone-specific prompt
-      const tonePrompt = this.buildReplyPromptWithTone(
-        tweetContext,
-        selectedTone
-      );
+      // Use shared buildPrompt from HumanRepliesAPI
+      const prompt = this.apiService.buildPrompt(tweetContext, {
+        platform: "x",
+        tone: selectedTone || "helpful",
+      });
 
-      const result = await this.apiService.generateReply(tonePrompt, {
+      const result = await this.apiService.generateReply(prompt, {
         platform: "x",
         tone: selectedTone || "helpful",
       });
@@ -622,24 +622,7 @@ class XIntegration {
     }
   }
 
-  buildReplyPromptWithTone(tweetContext, tone) {
-    const basePrompt = `Generate a thoughtful reply to this tweet: "${tweetContext}"`;
-
-    const toneInstructions = {
-      neutral: "Write a balanced, professional, and neutral response.",
-      joke: "Write a funny, humorous response that adds levity while staying respectful.",
-      support:
-        "Write a supportive, encouraging, and empathetic response that shows understanding.",
-      idea: "Write a response that presents an innovative idea or creative suggestion related to the topic.",
-      question:
-        "Write a response that asks a thoughtful question to encourage further discussion.",
-    };
-
-    const toneInstruction =
-      toneInstructions[tone] || "Write a helpful and engaging response.";
-
-    return `${basePrompt}\n\nTone instruction: ${toneInstruction}\n\nIMPORTANT: The response MUST be under 280 characters (Twitter limit). Be concise, engaging, and conversational. Count characters carefully.`;
-  }
+  // buildReplyPromptWithTone removed; now using HumanRepliesAPI.buildPrompt
 
   enforceCharacterLimit(text, maxLength = 280) {
     if (text.length <= maxLength) {
@@ -1327,7 +1310,7 @@ class XIntegration {
       e.stopPropagation();
       e.stopImmediatePropagation();
       this.log("AI button clicked, expanding toolbar");
-      this.expandToolbar(selectedText, textArea, selection);
+      // this.expandToolbar(selectedText, textArea, selection);
     });
 
     toolbar.appendChild(aiButton);
@@ -1336,233 +1319,234 @@ class XIntegration {
     return toolbar;
   }
 
-  expandToolbar(selectedText, textArea, selection) {
-    if (!this.currentToolbar) {
-      this.log("No current toolbar to expand");
-      return;
-    }
+  // expandToolbar(selectedText, textArea, selection) {
+  //   if (!this.currentToolbar) {
+  //     this.log("No current toolbar to expand");
+  //     return;
+  //   }
 
-    this.log("Expanding toolbar...");
+  //   this.log("Expanding toolbar...");
 
-    // Get current position
-    const currentRect = this.currentToolbar.getBoundingClientRect();
+  //   // Get current position
+  //   const currentRect = this.currentToolbar.getBoundingClientRect();
 
-    // Store the current toolbar reference
-    const oldToolbar = this.currentToolbar;
+  //   // Store the current toolbar reference
+  //   const oldToolbar = this.currentToolbar;
 
-    // Create expanded toolbar
-    this.currentToolbar = this.createExpandedToolbar(
-      selectedText,
-      textArea,
-      selection
-    );
+  //   // Create expanded toolbar
+  //   this.currentToolbar = this.createExpandedToolbar(
+  //     selectedText,
+  //     textArea,
+  //     selection
+  //   );
 
-    // Position expanded toolbar
-    const toolbarHeight = 280;
-    const toolbarWidth = 320;
+  //   // Position expanded toolbar
+  //   const toolbarHeight = 280;
+  //   const toolbarWidth = 320;
 
-    let top = currentRect.top + window.scrollY - toolbarHeight + 40;
-    let left = currentRect.left + window.scrollX - toolbarWidth / 2 + 60;
+  //   let top = currentRect.top + window.scrollY - toolbarHeight + 40;
+  //   let left = currentRect.left + window.scrollX - toolbarWidth / 2 + 60;
 
-    // Keep toolbar on screen
-    if (left < 10) left = 10;
-    if (left + toolbarWidth > window.innerWidth - 10) {
-      left = window.innerWidth - toolbarWidth - 10;
-    }
-    if (top < 10) {
-      top = currentRect.bottom + window.scrollY + 10;
-    }
+  //   // Keep toolbar on screen
+  //   if (left < 10) left = 10;
+  //   if (left + toolbarWidth > window.innerWidth - 10) {
+  //     left = window.innerWidth - toolbarWidth - 10;
+  //   }
+  //   if (top < 10) {
+  //     top = currentRect.bottom + window.scrollY + 10;
+  //   }
 
-    this.currentToolbar.style.top = top + "px";
-    this.currentToolbar.style.left = left + "px";
+  //   this.currentToolbar.style.top = top + "px";
+  //   this.currentToolbar.style.left = left + "px";
 
-    document.body.appendChild(this.currentToolbar);
+  //   document.body.appendChild(this.currentToolbar);
 
-    // Remove old toolbar after adding new one
-    if (oldToolbar && oldToolbar.parentElement) {
-      oldToolbar.parentElement.removeChild(oldToolbar);
-    }
+  //   // Remove old toolbar after adding new one
+  //   if (oldToolbar && oldToolbar.parentElement) {
+  //     oldToolbar.parentElement.removeChild(oldToolbar);
+  //   }
 
-    // Animate in
-    requestAnimationFrame(() => {
-      if (this.currentToolbar) {
-        this.currentToolbar.style.opacity = "1";
-        this.currentToolbar.style.transform = "translateY(0) scale(1)";
-      }
-    });
+  //   // Animate in
+  //   requestAnimationFrame(() => {
+  //     if (this.currentToolbar) {
+  //       this.currentToolbar.style.opacity = "1";
+  //       this.currentToolbar.style.transform = "translateY(0) scale(1)";
+  //     }
+  //   });
 
-    this.log("Toolbar expanded successfully");
-  }
+  //   this.log("Toolbar expanded successfully");
+  // }
 
-  createExpandedToolbar(selectedText, textArea, selection) {
-    const toolbar = document.createElement("div");
-    toolbar.className = "humanreplies-selection-toolbar-expanded";
-    // Theme-aware colors
-    const bgColor = this.isDarkMode ? "#15202b" : "white";
-    const borderColor = this.isDarkMode ? "#38444d" : "#e1e8ed";
-    const textColor = this.isDarkMode ? "white" : "#2c3e50";
-    const shadowColor = this.isDarkMode
-      ? "rgba(0, 0, 0, 0.3)"
-      : "rgba(0, 0, 0, 0.15)";
+  // createExpandedToolbar(selectedText, textArea, selection) {
+  //   const toolbar = document.createElement("div");
+  //   toolbar.className = "humanreplies-selection-toolbar-expanded";
+  //   // Theme-aware colors
+  //   const bgColor = this.isDarkMode ? "#15202b" : "white";
+  //   const borderColor = this.isDarkMode ? "#38444d" : "#e1e8ed";
+  //   const textColor = this.isDarkMode ? "white" : "#2c3e50";
+  //   const shadowColor = this.isDarkMode
+  //     ? "rgba(0, 0, 0, 0.3)"
+  //     : "rgba(0, 0, 0, 0.15)";
 
-    toolbar.style.cssText = `
-      position: absolute;
-      background: ${bgColor};
-      border: 1px solid ${borderColor};
-      border-radius: 12px;
-      box-shadow: 0 8px 24px ${shadowColor};
-      padding: 12px;
-      z-index: 10000;
-      opacity: 0;
-      transform: translateY(-10px) scale(0.95);
-      transition: all 0.2s ease;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-width: 320px;
-      color: ${textColor};
-    `;
+  //   toolbar.style.cssText = `
+  //     position: absolute;
+  //     background: ${bgColor};
+  //     border: 1px solid ${borderColor};
+  //     border-radius: 12px;
+  //     box-shadow: 0 8px 24px ${shadowColor};
+  //     padding: 12px;
+  //     z-index: 10000;
+  //     opacity: 0;
+  //     transform: translateY(-10px) scale(0.95);
+  //     transition: all 0.2s ease;
+  //     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  //     min-width: 320px;
+  //     color: ${textColor};
+  //   `;
 
-    // Close button (top right corner)
-    const closeButton = document.createElement("button");
-    closeButton.style.cssText = `
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: transparent;
-      border: none;
-      color: #7f8c8d;
-      font-size: 16px;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      transition: all 0.2s ease;
-      z-index: 1;
-    `;
-    closeButton.innerHTML = "×";
-    closeButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      this.log("Close button clicked");
-      this.hideSelectionToolbar();
-    });
+  //   // Close button (top right corner)
+  //   const closeButton = document.createElement("button");
+  //   closeButton.style.cssText = `
+  //     position: absolute;
+  //     top: 8px;
+  //     right: 8px;
+  //     background: transparent;
+  //     border: none;
+  //     color: #7f8c8d;
+  //     font-size: 16px;
+  //     cursor: pointer;
+  //     padding: 4px;
+  //     border-radius: 4px;
+  //     transition: all 0.2s ease;
+  //     z-index: 1;
+  //   `;
+  //   closeButton.innerHTML = "×";
+  //   closeButton.addEventListener("click", (e) => {
+  //     e.preventDefault();
+  //     e.stopPropagation();
+  //     e.stopImmediatePropagation();
+  //     this.log("Close button clicked");
+  //     this.hideSelectionToolbar();
+  //   });
 
-    toolbar.appendChild(closeButton);
+  //   toolbar.appendChild(closeButton);
 
-    // Options
-    const options = [
-      {
-        icon: "✨",
-        text: "Improve writing",
-        action: "improve",
-        description: "Make the text clearer and more engaging",
-      },
-      {
-        icon: "✓",
-        text: "Check spelling & grammar",
-        action: "grammar",
-        description: "Fix spelling and grammar issues",
-      },
-      {
-        icon: "—",
-        text: "Make shorter",
-        action: "shorter",
-        description: "Condense the text while keeping the meaning",
-      },
-      {
-        icon: "≡",
-        text: "Make longer",
-        action: "longer",
-        description: "Expand the text with more detail",
-      },
-      {
-        icon: "✦",
-        text: "Simplify language",
-        action: "simplify",
-        description: "Use simpler, clearer language",
-      },
-      {
-        icon: "🎭",
-        text: "Change tone",
-        action: "tone",
-        description: "Adjust the tone and style",
-        hasSubmenu: true,
-        submenu: [
-          { icon: "👍", text: "Neutral", action: "tone-neutral" },
-          { icon: "😂", text: "Joke", action: "tone-joke" },
-          { icon: "❤️", text: "Support", action: "tone-support" },
-          { icon: "💡", text: "Idea", action: "tone-idea" },
-          { icon: "❓", text: "Question", action: "tone-question" },
-        ],
-      },
-    ];
+  //   // Options
+  //   const options = [
+  //     {
+  //       icon: "✨",
+  //       text: "Improve writing",
+  //       action: "improve",
+  //       description: "Make the text clearer and more engaging",
+  //     },
+  //     {
+  //       icon: "✓",
+  //       text: "Check spelling & grammar",
+  //       action: "grammar",
+  //       description: "Fix spelling and grammar issues",
+  //     },
+  //     {
+  //       icon: "—",
+  //       text: "Make shorter",
+  //       action: "shorter",
+  //       description: "Condense the text while keeping the meaning",
+  //     },
+  //     {
+  //       icon: "≡",
+  //       text: "Make longer",
+  //       action: "longer",
+  //       description: "Expand the text with more detail",
+  //     },
+  //     {
+  //       icon: "✦",
+  //       text: "Simplify language",
+  //       action: "simplify",
+  //       description: "Use simpler, clearer language",
+  //     },
+  //     {
+  //       icon: "🎭",
+  //       text: "Change tone",
+  //       action: "tone",
+  //       description: "Adjust the tone and style",
+  //       hasSubmenu: true,
+  //       submenu: [
+  //         { icon: "👍", text: "Neutral", action: "tone-neutral" },
+  //         { icon: "😂", text: "Joke", action: "tone-joke" },
+  //         { icon: "❤️", text: "Support", action: "tone-support" },
+  //         { icon: "💡", text: "Idea", action: "tone-idea" },
+  //         { icon: "❓", text: "Question", action: "tone-question" },
+  //         { icon: "💪", text: "Confident", action: "tone-confident" },
+  //       ],
+  //     },
+  //   ];
 
-    options.forEach((option) => {
-      const button = document.createElement("button");
-      button.style.cssText = `
-        display: flex;
-        align-items: center;
-        width: 100%;
-        padding: 10px 12px;
-        border: none;
-        background: transparent;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        color: #2c3e50;
-        transition: background 0.2s ease;
-        margin-bottom: 2px;
-        text-align: left;
-        position: relative;
-      `;
+  //   options.forEach((option) => {
+  //     const button = document.createElement("button");
+  //     button.style.cssText = `
+  //       display: flex;
+  //       align-items: center;
+  //       width: 100%;
+  //       padding: 10px 12px;
+  //       border: none;
+  //       background: transparent;
+  //       border-radius: 8px;
+  //       cursor: pointer;
+  //       font-size: 14px;
+  //       font-weight: 500;
+  //       color: #2c3e50;
+  //       transition: background 0.2s ease;
+  //       margin-bottom: 2px;
+  //       text-align: left;
+  //       position: relative;
+  //     `;
 
-      button.innerHTML = `
-        <span style="margin-right: 12px; font-size: 16px;">${option.icon}</span>
-        <span>${option.text}</span>
-        ${
-          option.hasSubmenu
-            ? '<span style="margin-left: auto; font-size: 12px; color: #7f8c8d;">▶</span>'
-            : ""
-        }
-      `;
+  //     button.innerHTML = `
+  //       <span style="margin-right: 12px; font-size: 16px;">${option.icon}</span>
+  //       <span>${option.text}</span>
+  //       ${
+  //         option.hasSubmenu
+  //           ? '<span style="margin-left: auto; font-size: 12px; color: #7f8c8d;">▶</span>'
+  //           : ""
+  //       }
+  //     `;
 
-      button.addEventListener("mouseenter", () => {
-        button.style.background = "#f5f3f0";
-      });
+  //     button.addEventListener("mouseenter", () => {
+  //       button.style.background = "#f5f3f0";
+  //     });
 
-      button.addEventListener("mouseleave", () => {
-        button.style.background = "transparent";
-      });
+  //     button.addEventListener("mouseleave", () => {
+  //       button.style.background = "transparent";
+  //     });
 
-      button.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        this.log(`Selection action clicked: ${option.action}`);
+  //     button.addEventListener("click", (e) => {
+  //       e.preventDefault();
+  //       e.stopPropagation();
+  //       e.stopImmediatePropagation();
+  //       this.log(`Selection action clicked: ${option.action}`);
 
-        if (option.hasSubmenu) {
-          this.showToneSubmenu(
-            button,
-            option.submenu,
-            selectedText,
-            textArea,
-            selection
-          );
-        } else {
-          this.handleSelectionAction(
-            option.action,
-            selectedText,
-            textArea,
-            selection
-          );
-        }
-      });
+  //       if (option.hasSubmenu) {
+  //         this.showToneSubmenu(
+  //           button,
+  //           option.submenu,
+  //           selectedText,
+  //           textArea,
+  //           selection
+  //         );
+  //       } else {
+  //         this.handleSelectionAction(
+  //           option.action,
+  //           selectedText,
+  //           textArea,
+  //           selection
+  //         );
+  //       }
+  //     });
 
-      toolbar.appendChild(button);
-    });
+  //     toolbar.appendChild(button);
+  //   });
 
-    return toolbar;
-  }
+  //   return toolbar;
+  // }
 
   async handleSelectionAction(action, selectedText, textArea, selection) {
     this.log(

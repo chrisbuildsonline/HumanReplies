@@ -97,27 +97,36 @@ class HumanRepliesAPI {
     const isTwitter = p === "twitter" || p === "x";
 
     const platformInstructions = isTwitter
-      ? "Limit to under 200 characters. Avoid hashtags and unnecessary @mentions. Use newlines \r\n if suitable."
-      : "Keep it concise and skimmable.";
+      ? "Limit to under 100 characters. Keep it very light and short, do not sound to stiff. Avoid hashtags and unnecessary @mentions. Use newlines \r\n if suitable. "
+      : "Keep it concise and skimmable."; // Twitter is 280
 
-    let toneInstruction = "Write a helpful, balanced response";
+    let toneInstruction = "Write a helpful, balanced reply. ";
     switch (tone) {
       case "joke":
-        toneInstruction = "Write a funny, good-natured response";
+        toneInstruction = "Write a funny, good-natured reply.";
         break;
       case "support":
-        toneInstruction = "Write a supportive, encouraging response";
+        toneInstruction =
+          "Write a supportive, encouraging reply. You don't have to write keep going in every response.";
         break;
       case "idea":
-        toneInstruction = "Suggest an innovative, practical idea";
+        toneInstruction = "Suggest an innovative, practical idea as a reply.";
+        break;
+      case "confident":
+        toneInstruction = "Write a confident, assertive reply.";
         break;
       case "question":
-        toneInstruction = "Ask a thoughtful, conversation-starting question";
+        toneInstruction =
+          "Ask a thoughtful, conversation-starting question as a reply.";
         break;
     }
 
+    toneInstruction +=
+      " You are replying to a human, so act like it. Use smileys if appropriate. Do not take everything literally.";
+
     const noDashRule =
       "Do not use em dashes (—) or en dashes (–). Use commas, periods, or semicolons instead. " +
+      "Grammar should be easy to read, for everyone. " +
       "Before returning, scan the text and replace any em/en dash with a comma or period.";
 
     const style = userWritingStyle
