@@ -122,7 +122,7 @@ class HumanRepliesAPI {
     }
 
     toneInstruction +=
-      " You are replying to a human, so act like it. Use smileys if appropriate. Do not take everything literally.";
+      " You are replying to a human, so act like it. Use smileys only if appropriate. Build on the original post. Answer questions if asked.";
 
     const noDashRule =
       "Do not use em dashes (—) or en dashes (–). Use commas, periods, or semicolons instead. " +
