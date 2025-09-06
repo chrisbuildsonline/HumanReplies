@@ -1,304 +1,321 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>HumanReplies</title>
-    <style>
-      body {
-        width: 320px;
-        padding: 24px;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
-        margin: 0;
-        background: #f6f1e8;
-        color: #2c3e50;
-      }
 
-      .header {
-        text-align: center;
-        margin-bottom: 24px;
-        padding: 16px 0;
-      }
+<head>
+  <meta charset="utf-8" />
+  <title>HumanReplies</title>
+  <style>
+    body {
+      width: 320px;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        sans-serif;
+      margin: 0;
+      background: #f6f1e8;
+     <div class="header">
+    <h1 class="title">HumanReplies</h1>
+    <p class="subtitle">AI-Powered Reply Generation</p>
+  </div>
 
-      .title {
-        font-size: 28px;
-        font-weight: 700;
-        color: #2c3e50;
-        margin: 0;
-        letter-spacing: -0.5px;
-        line-height: 1.2;
-      }
+  <!-- User logged out state -->
+  <div id="loggedOutState">
+    <div class="status" id="extensionStatus">
+      <span class="status-text" id="statusText">Extension Active</span>
+      <div class="status-indicator" id="statusIndicator"></div>
+    </div>   }
 
-      .subtitle {
-        font-size: 13px;
-        color: #7f8c8d;
-        margin: 6px 0 0 0;
-        font-weight: 400;
-      }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+      padding: 16px 0;
+    }
 
-      .section {
-        margin-bottom: 16px;
-      }
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin: 0;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
 
-      .section-title {
-        font-size: 15px;
-        font-weight: 600;
-        margin-bottom: 12px;
-        color: #2c3e50;
-      }
+    .subtitle {
+      font-size: 13px;
+      color: #7f8c8d;
+      margin: 6px 0 0 0;
+      font-weight: 400;
+    }
 
-      .feature {
-        display: flex;
-        align-items: center;
-        padding: 12px;
-        background: #fff;
-        border-radius: 10px;
-        margin-bottom: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #1d9bf0;
-      }
+    .section {
+      margin-bottom: 16px;
+    }
 
-      .feature-icon {
-        margin-right: 12px;
-        font-size: 18px;
-      }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #2c3e50;
+    }
 
-      .feature-text {
-        font-size: 13px;
-        color: #2c3e50;
-        font-weight: 500;
-      }
+    .feature {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #1d9bf0;
+    }
 
-      .status {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 14px;
-        background: #fff;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      }
+    .feature-icon {
+      margin-right: 12px;
+      font-size: 18px;
+    }
 
-      .status.logged-in {
-        border: 1px solid #27ae60;
-      }
+    .feature-text {
+      font-size: 13px;
+      color: #2c3e50;
+      font-weight: 500;
+    }
 
-      .status.logged-out {
-        border: 1px solid #e74c3c;
-      }
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px;
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
 
-      .status-text {
-        font-size: 13px;
-        font-weight: 600;
-      }
+    .status.logged-in {
+      border: 1px solid #27ae60;
+    }
 
-      .status-text.logged-in {
-        color: #27ae60;
-      }
+    .status.logged-out {
+      border: 1px solid #e74c3c;
+    }
 
-      .status-text.logged-out {
-        color: #e74c3c;
-      }
+    .status-text {
+      font-size: 13px;
+      font-weight: 600;
+    }
 
-      .status-indicator {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-      }
+    .status-text.logged-in {
+      color: #27ae60;
+    }
 
-      .status-indicator.logged-in {
-        background: #27ae60;
-      }
+    .status-text.logged-out {
+      color: #e74c3c;
+    }
 
-      .status-indicator.logged-out {
-        background: #e74c3c;
-      }
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
 
-      .user-info {
-        display: flex;
-        align-items: center;
-        padding: 14px;
-        background: #fff;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #27ae60;
-      }
+    .status-indicator.logged-in {
+      background: #27ae60;
+    }
 
-      .user-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: #27ae60;
-        margin-right: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 14px;
-      }
+    .status-indicator.logged-out {
+      background: #e74c3c;
+    }
 
-      .user-details {
-        flex: 1;
-      }
+    .user-info {
+      display: flex;
+      align-items: center;
+      padding: 14px;
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #27ae60;
+    }
 
-      .user-name {
-        font-size: 13px;
-        color: #2c3e50;
-        font-weight: 600;
-        margin: 0 0 2px 0;
-      }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #27ae60;
+      margin-right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+    }
 
-      .user-email {
-        font-size: 11px;
-        color: #7f8c8d;
-        margin: 0;
-      }
+    .user-details {
+      flex: 1;
+    }
 
-      .login-section {
-        text-align: center;
-        margin-bottom: 20px;
-      }
+    .user-name {
+      font-size: 13px;
+      color: #2c3e50;
+      font-weight: 600;
+      margin: 0 0 2px 0;
+    }
 
-      .login-button {
-        background: #2c3e50;
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 10px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        width: 100%;
-        margin-bottom: 8px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
+    .user-email {
+      font-size: 11px;
+      color: #7f8c8d;
+      margin: 0;
+    }
 
-      .login-button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3);
-        background: #34495e;
-      }
+    .login-section {
+      text-align: center;
+      margin-bottom: 20px;
+    }
 
-      .logout-button {
-        background: transparent;
-        color: #e74c3c;
-        border: 1px solid #e74c3c;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
+    .login-button {
+      background: #2c3e50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
 
-      .logout-button:hover {
-        background: #e74c3c;
-        color: white;
-      }
+    .login-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3);
+      background: #34495e;
+    }
 
-      .login-description {
-        font-size: 12px;
-        color: #7f8c8d;
-        margin-top: 8px;
-        line-height: 1.4;
-      }
+    .logout-button {
+      background: transparent;
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
 
-      .shortcut {
-        background: #f0f0f0;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-family: monospace;
-        color: #333;
-      }
+    .logout-button:hover {
+      background: #e74c3c;
+      color: white;
+    }
 
-      .footer {
-        text-align: center;
-        font-size: 11px;
-        color: #7f8c8d;
-        margin-top: 20px;
-        padding-top: 16px;
-        border-top: 1px solid #e8e5e1;
-      }
+    .login-description {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
 
-      .setting-item {
-        display: flex;
-        flex-direction: column;
-        padding: 12px;
-        background: #fff;
-        border-radius: 10px;
-        margin-bottom: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #8b5cf6;
-      }
+    .shortcut {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #333;
+    }
 
-      .setting-label {
-        font-size: 13px;
-        color: #2c3e50;
-        font-weight: 600;
-        margin-bottom: 6px;
-      }
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: #7f8c8d;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #e8e5e1;
+    }
 
-      .setting-description {
-        font-size: 11px;
-        color: #7f8c8d;
-        margin-bottom: 8px;
-      }
+    .setting-item {
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #8b5cf6;
+    }
 
-      .setting-select {
-        padding: 8px 12px;
-        border: 1px solid #8b5cf6;
-        border-radius: 8px;
-        font-size: 12px;
-        background: #f6f1e8;
-        color: #2c3e50;
-        cursor: pointer;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
-      }
+    .setting-label {
+      font-size: 13px;
+      color: #2c3e50;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
 
-      .disabled-overlay {
-        position: relative;
-        opacity: 0.5;
-        pointer-events: none;
-      }
+    .setting-description {
+      font-size: 11px;
+      color: #7f8c8d;
+      margin-bottom: 8px;
+    }
 
-      .disabled-overlay::after {
-        content: "🔒 Login for advanced features";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(44, 62, 80, 0.9);
-        color: white;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 500;
-        white-space: nowrap;
-      }
+    .setting-select {
+      padding: 8px 12px;
+      border: 1px solid #8b5cf6;
+      border-radius: 8px;
+      font-size: 12px;
+      background: #f6f1e8;
+      color: #2c3e50;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        sans-serif;
+    }
 
-      .hidden {
-        display: none;
-      }
-    </style>
-  </head>
+    .disabled-overlay {
+      position: relative;
+      opacity: 0.5;
+      pointer-events: none;
+    }
 
-  <body>
-    <div class="header">
-      <h1 class="title">HumanReplies</h1>
-      <p class="subtitle">AI-Powered Reply Generation</p>
+    .disabled-overlay::after {
+      content: "🔒 Login for advanced features";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(44, 62, 80, 0.9);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1 class="title">HumanReplies</h1>
+    <p class="subtitle">AI-Powered Reply Generation</p>
+  </div>
+
+  <div id="site-not-supported-view" class="hidden">
+    <div class="status logged-out">
+      <span class="status-text logged-out">This website is not supported</span>
+      <div class="status-indicator logged-out"></div>
     </div>
+  </div>
 
+  <!-- Standard view - only shown when site is supported -->
+  <div id="supported-site-view">
     <!-- User logged out state -->
     <div id="loggedOutState">
       <div class="status logged-in" id="extensionStatus">
-        <span class="status-text logged-in" id="statusText"
-          >Extension Active</span
-        >
+        <span class="status-text logged-in" id="statusText">Extension Active</span>
         <div class="status-indicator logged-in" id="statusIndicator"></div>
       </div>
 
@@ -306,11 +323,7 @@
         <button class="login-button" onclick="handleLogin()">
           🚀 Login to HumanReplies
         </button>
-        <a
-          class="login"
-          onclick="handleSignup()"
-          style="margin-top: 8px"
-        >
+        <a class="login" onclick="handleSignup()" style="margin-top: 8px; cursor: pointer;">
           ✨ Create Account
         </a>
         <div class="login-description">
@@ -325,11 +338,7 @@
           <div class="setting-description">
             Choose from preset tones (Login to create custom ones)
           </div>
-          <select
-            id="replyToneSelectLoggedOut"
-            class="setting-select"
-            onchange="saveToneSetting(this.value)"
-          >
+          <select id="replyToneSelectLoggedOut" class="setting-select" onchange="saveToneSetting(this.value)">
             <option value="ask">Always ask me</option>
             <option value="neutral">👍 Neutral</option>
             <option value="joke">😂 Joke</option>
@@ -360,99 +369,15 @@
       </div>
     </div>
 
-    <!-- User logged in state -->
-    <div id="loggedInState" class="hidden">
-      <div class="user-info">
-        <div class="user-avatar">JD</div>
-        <div class="user-details">
-          <div class="user-name">John Doe</div>
-          <div class="user-email">john.doe@example.com</div>
-        </div>
-        <button class="logout-button" onclick="handleLogout()">Logout</button>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Features</div>
-        <div class="feature">
-          <span class="feature-icon">🧠</span>
-          <span class="feature-text">Generate thoughtful replies</span>
-        </div>
-        <div class="feature">
-          <span class="feature-icon">⚡</span>
-          <span class="feature-text">Instant AI-powered responses</span>
-        </div>
-        <div class="feature">
-          <span class="feature-icon">🎯</span>
-          <span class="feature-text">Context-aware suggestions</span>
-        </div>
-        <div class="feature">
-          <span class="feature-icon">🔒</span>
-          <span class="feature-text">Unlimited free replies daily</span>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Advanced Settings</div>
-        <div class="setting-item">
-          <div class="setting-label">Custom Reply Tones</div>
-          <div class="setting-description">
-            Create and manage your own personalized tone presets
-          </div>
-          <select
-            id="replyToneSelect"
-            class="setting-select"
-            onchange="saveToneSetting(this.value)"
-          >
-            <option value="ask">Always ask me</option>
-            <option value="neutral">👍 Neutral</option>
-            <option value="joke">😂 Joke</option>
-            <option value="support">❤️ Support</option>
-            <option value="idea">💡 Idea</option>
-            <option value="question">❓ Question</option>
-            <option value="confident">💪 Confident</option>
-            <option value="custom1">🎨 My Professional Tone</option>
-            <option value="custom2">🌟 My Friendly Tone</option>
-            <option value="custom3">🔥 My Witty Tone</option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <div class="setting-label">Tone Management</div>
-          <div class="setting-description">
-            Add, edit, or delete your custom tone presets
-          </div>
-          <button
-            class="login-button"
-            style="width: auto; padding: 8px 16px; font-size: 12px; margin: 0"
-          >
-            + Add Custom Tone
-          </button>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">How to Use</div>
-        <div class="feature">
-          <span class="feature-icon">1️⃣</span>
-          <span class="feature-text">Visit supported social platforms</span>
-        </div>
-        <div class="feature">
-          <span class="feature-icon">2️⃣</span>
-          <span class="feature-text">Look for reply areas</span>
-        </div>
-        <div class="feature">
-          <span class="feature-icon">3️⃣</span>
-          <span class="feature-text">Click "🧠 Generate Reply"</span>
-        </div>
-      </div>
-    </div>
-
     <div class="footer">
       <p>Version 1.0.0</p>
     </div>
+  </div>
 
-    <script src="config/environment.js"></script>
-    <script src="core/api-service.js"></script>
-    <script src="supabase-client.js"></script>
-    <script src="popup.js"></script>
-  </body>
+  <script src="config/environment.js"></script>
+  <script src="core/api-service.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="popup.js"></script>
+</body>
+
 </html>
