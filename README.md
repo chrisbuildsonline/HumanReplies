@@ -16,12 +16,57 @@ HumanReplies/
 ## 🚀 Quick Start
 
 ### 1. Backend Setup
+
+**Quick Setup (Recommended):**
 ```bash
 cd backend
+
+# macOS/Linux
+./setup.sh
+
+# Windows
+setup.bat
+```
+
+**Manual Setup:**
+```bash
+cd backend
+
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Setup PostgreSQL database (requires Postgres.app or PostgreSQL running)
 python setup_db.py
+
+# Start the backend server
 python run.py
+
 # API available at http://localhost:8000
+# API docs at http://localhost:8000/docs
+# Health check: http://localhost:8000/health
+```
+
+**Prerequisites for Backend:**
+- **PostgreSQL**: Install Postgres.app or PostgreSQL server
+- **Python 3.9+**: With virtual environment (created automatically)
+- **Supabase Account**: For authentication (credentials in .env)
+
+**Virtual Environment Commands:**
+```bash
+# Create virtual environment (first time only)
+python -m venv .venv
+
+# Activate virtual environment
+source .venv/bin/activate  # macOS/Linux
+# OR
+.venv\Scripts\activate     # Windows
+
+# Deactivate when done
+deactivate
 ```
 
 ### 2. Extension Development
@@ -137,6 +182,12 @@ extension/
 - `GET /recent` - Get recent reply activity
 - `DELETE /{reply_id}` - Delete specific reply
 
+#### External Services (`/api/v1/services`)
+- `GET /urls` - Get all external service URLs (cached for 1 hour)
+- `GET /urls/{service_name}` - Get specific service URL
+- `POST /urls/{service_name}/refresh` - Force refresh service URL cache
+- `POST /generate-reply` - Generate reply using external AI service (proxied)
+
 ### Database Schema
 
 #### Users Table
@@ -169,6 +220,21 @@ CREATE TABLE replies (
 );
 ```
 
+#### External Service URLs Table
+```sql
+CREATE TABLE external_service_urls (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_name VARCHAR UNIQUE NOT NULL,
+    url VARCHAR NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    last_checked TIMESTAMP DEFAULT NOW(),
+    cache_expires_at TIMESTAMP,
+    metadata TEXT, -- JSON for additional service info
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
 ### Environment Variables
 ```env
 # Supabase (Auth only)
@@ -190,6 +256,26 @@ ENVIRONMENT=development
 API_HOST=0.0.0.0
 API_PORT=8000
 ```
+
+### External Service URL Management
+
+The backend now manages all external service URLs with automatic caching:
+
+#### Service URL Endpoints
+- `GET /api/v1/services/urls` - Get all service URLs (cached 1 hour)
+- `GET /api/v1/services/urls/pollinations` - Get Pollinations.ai URL
+- `POST /api/v1/services/urls/pollinations/refresh` - Force refresh cache
+
+#### Automatic Caching
+- URLs are cached for 1 hour in PostgreSQL
+- Extension fetches URLs from backend only
+- No hardcoded external URLs in extension code
+- Automatic cache refresh when expired
+
+#### Adding New Services
+1. Add service to `default_urls` in `backend/app/routers/services.py`
+2. Update database with new service entry
+3. Extension automatically uses new service via backend
 
 ### Development Workflow
 ```bash
@@ -295,10 +381,13 @@ npm run export   # Static export
 
 ```mermaid
 graph TD
-    A[Browser Extension] -->|Generate Reply| B[Pollinations AI]
-    A -->|Store Reply Data| C[FastAPI Backend]
+    A[Browser Extension] -->|Generate Reply Request| C[FastAPI Backend]
+    C -->|Fetch Cached URLs| E[PostgreSQL]
+    C -->|Proxy Request| B[Pollinations AI]
+    B -->|AI Response| C
+    C -->|Store Reply + Analytics| E
+    C -->|Return Reply| A
     C -->|Authenticate| D[Supabase Auth]
-    C -->|Store Data| E[PostgreSQL]
     F[Dashboard] -->|Fetch Analytics| C
     G[Landing Page] -->|Sign Up| D
     G -->|Download| A
@@ -306,12 +395,21 @@ graph TD
 
 ### Data Flow
 1. **User generates reply** in browser extension
-2. **Extension calls AI service** (Pollinations.ai currently)
-3. **Reply data stored** in FastAPI backend
-4. **Backend authenticates** via Supabase JWT
-5. **Data persisted** in PostgreSQL database
-6. **Dashboard fetches** analytics from backend
-7. **Real-time updates** show usage statistics
+2. **Extension calls backend API** (no direct external service calls)
+3. **Backend fetches cached service URLs** from PostgreSQL (1-hour cache)
+4. **Backend proxies request** to external AI service (Pollinations.ai)
+5. **Backend stores reply and analytics** in PostgreSQL database
+6. **Backend authenticates** via Supabase JWT
+7. **Dashboard fetches** analytics from backend
+8. **Real-time updates** show usage statistics
+
+### 🔧 New Architecture Benefits
+- **Centralized Control**: All external service URLs managed in backend
+- **Caching**: Service URLs cached for 1 hour to reduce latency
+- **No Direct External Calls**: Extension only communicates with your backend
+- **Better Error Handling**: Centralized error management and retry logic
+- **Analytics**: All requests automatically logged for dashboard insights
+- **Security**: No API keys or external URLs exposed in extension code
 
 ---
 

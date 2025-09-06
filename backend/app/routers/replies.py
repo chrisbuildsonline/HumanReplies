@@ -51,7 +51,7 @@ async def create_reply(
             generated_reply=reply_data.generated_reply,
             service_type=reply_data.service_type,
             post_url=reply_data.post_url,
-            metadata=json.dumps(reply_data.metadata) if reply_data.metadata else None
+            reply_metadata=json.dumps(reply_data.metadata) if reply_data.metadata else None
         )
         
         db.add(reply)
@@ -65,7 +65,7 @@ async def create_reply(
             generated_reply=reply.generated_reply,
             service_type=reply.service_type,
             post_url=reply.post_url,
-            metadata=json.loads(reply.metadata) if reply.metadata else None,
+            metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
             created_at=reply.created_at,
             updated_at=reply.updated_at
         )
@@ -107,7 +107,7 @@ async def get_user_replies(
                 generated_reply=reply.generated_reply,
                 service_type=reply.service_type,
                 post_url=reply.post_url,
-                metadata=json.loads(reply.metadata) if reply.metadata else None,
+                metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
                 created_at=reply.created_at,
                 updated_at=reply.updated_at
             )
@@ -254,7 +254,7 @@ async def get_recent_activity(
                 generated_reply=reply.generated_reply,
                 service_type=reply.service_type,
                 post_url=reply.post_url,
-                metadata=json.loads(reply.metadata) if reply.metadata else None,
+                metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
                 created_at=reply.created_at,
                 updated_at=reply.updated_at
             )

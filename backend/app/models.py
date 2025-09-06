@@ -89,6 +89,32 @@ class RecentActivity(BaseModel):
     replies: List[ReplyResponse]
     total_count: int
 
+# External Service URL Models
+class ExternalServiceUrlResponse(BaseModel):
+    service_name: str
+    url: str
+    is_active: bool
+    last_checked: datetime
+    cache_expires_at: Optional[datetime]
+
+class ServiceUrlsResponse(BaseModel):
+    pollinations_url: str
+    cache_expires_at: Optional[datetime]
+    last_updated: datetime
+
+class GenerateReplyRequest(BaseModel):
+    context: str = Field(..., description="The original post content to reply to")
+    platform: str = Field(default="x", description="Social media platform")
+    tone: str = Field(default="helpful", description="Tone of the reply")
+    length: str = Field(default="medium", description="Length preference")
+    user_writing_style: Optional[str] = Field(None, description="User's writing style preferences")
+
+class GenerateReplyResponse(BaseModel):
+    reply: str
+    remaining_replies: Optional[int] = None
+    is_limit_reached: bool = False
+    service_used: str = "pollinations"
+
 # SQLAlchemy Models (Database)
 class User(Base):
     __tablename__ = "users"
@@ -115,9 +141,22 @@ class Reply(Base):
     generated_reply = Column(Text, nullable=False)
     service_type = Column(String, nullable=False, index=True)
     post_url = Column(String, nullable=True)
-    metadata = Column(Text, nullable=True)  # JSON stored as text
+    reply_metadata = Column(Text, nullable=True)  # JSON stored as text
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="replies")
+
+class ExternalServiceUrl(Base):
+    __tablename__ = "external_service_urls"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    service_name = Column(String, nullable=False, unique=True, index=True)  # e.g., "pollinations"
+    url = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    last_checked = Column(DateTime, default=datetime.utcnow)
+    cache_expires_at = Column(DateTime, nullable=True)
+    metadata = Column(Text, nullable=True)  # JSON for additional service info
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

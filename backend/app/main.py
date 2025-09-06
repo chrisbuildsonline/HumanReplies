@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from app.routers import auth, users, replies
+from app.routers import auth, users, replies, services
 from app.config import settings
 from app.database import engine, Base
 import uvicorn
@@ -62,6 +62,7 @@ async def health_check():
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(replies.router, prefix="/api/v1")
+app.include_router(services.router, prefix="/api/v1")
 
 # Root endpoint
 @app.get("/")

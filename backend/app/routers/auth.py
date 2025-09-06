@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.models import LoginRequest, CreateUserRequest, AuthResponse, ErrorResponse, UserProfile
-from app.database import supabase
+from app.database import get_supabase_client
 from app.auth import get_current_user
 from typing import Dict, Any
 
@@ -11,6 +11,7 @@ async def register(user_data: CreateUserRequest):
     """Register a new user"""
     try:
         # Create user in Supabase Auth
+        supabase = get_supabase_client()
         auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
@@ -47,6 +48,7 @@ async def register(user_data: CreateUserRequest):
 async def login(credentials: LoginRequest):
     """Login user"""
     try:
+        supabase = get_supabase_client()
         auth_response = supabase.auth.sign_in_with_password({
             "email": credentials.email,
             "password": credentials.password
@@ -80,6 +82,7 @@ async def login(credentials: LoginRequest):
 async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Logout user"""
     try:
+        supabase = get_supabase_client()
         supabase.auth.sign_out()
         return {"message": "Logged out successfully"}
     except Exception as e:

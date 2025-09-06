@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from typing import Optional, Dict, Any
 from app.config import settings
-from app.database import supabase
+from app.database import get_supabase_client
 
 security = HTTPBearer()
 
@@ -29,19 +29,25 @@ class AuthService:
     def get_user_from_token(token: str) -> Dict[str, Any]:
         """Get user data from Supabase using token"""
         try:
-            # Set the auth token for this request
-            supabase.auth.set_session(token, "")
-            user = supabase.auth.get_user()
-            if not user.user:
+            # Verify the JWT token first
+            payload = AuthService.verify_token(token)
+            
+            # Get user data from Supabase
+            supabase = get_supabase_client()
+            user_response = supabase.auth.get_user(token)
+            
+            if not user_response.user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="User not found"
                 )
-            return user.user.model_dump()
+            return user_response.user.model_dump()
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token or user not found"
+                detail=f"Invalid token or user not found: {str(e)}"
             )
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
