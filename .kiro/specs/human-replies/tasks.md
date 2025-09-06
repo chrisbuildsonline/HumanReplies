@@ -12,7 +12,7 @@
   - Create protected API routes for user data management
   - _Requirements: 7, 8_
 
-- [ ] 3. Build Next.js landing page and basic web application
+- [-] 3. Build Next.js landing page and basic web application
   - Create responsive landing page with hero section and extension download link
   - Implement user dashboard with authentication-protected routes
   - Add basic navigation and layout components
