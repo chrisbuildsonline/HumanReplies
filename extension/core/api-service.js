@@ -2,12 +2,42 @@
 
 class HumanRepliesAPI {
   constructor() {
-    this.baseURL = "https://api.humanreplies.com/v1"; // Future SaaS endpoint
+    // Initialize with environment config
+    this.initializeConfig();
     this.fallbackMode = true; // Use Pollinations.ai directly for now
-    this.pollinationsURL = "https://text.pollinations.ai";
+  }
+
+  async initializeConfig() {
+    // Load environment configuration
+    if (typeof window !== "undefined" && window.EnvironmentConfig) {
+      await window.EnvironmentConfig.loadEnvironment();
+      this.baseURL = window.EnvironmentConfig.getApiBaseURL();
+      this.pollinationsURL = window.EnvironmentConfig.getPollinationsURL();
+      this.debugMode = window.EnvironmentConfig.isDebugMode();
+      
+      // Check for custom base URL override
+      const customURL = await window.EnvironmentConfig.getCustomBaseURL();
+      if (customURL) {
+        this.baseURL = customURL;
+      }
+    } else {
+      // Fallback configuration
+      this.baseURL = "http://localhost:8000/api/v1"; // Default to local development
+      this.pollinationsURL = "https://text.pollinations.ai";
+      this.debugMode = true;
+    }
+
+    if (this.debugMode) {
+      console.log(`HumanReplies API initialized with baseURL: ${this.baseURL}`);
+    }
   }
 
   async generateReply(context, options = {}) {
+    // Ensure config is loaded
+    if (!this.baseURL) {
+      await this.initializeConfig();
+    }
+
     if (this.fallbackMode) {
       return this.generateWithPollinations(context, options);
     } else {
@@ -16,8 +46,12 @@ class HumanRepliesAPI {
   }
 
   async generateWithSaaS(context, options) {
-    // Future implementation for SaaS service
+    // Implementation for your FastAPI backend
     try {
+      if (this.debugMode) {
+        console.log(`Making request to: ${this.baseURL}/generate-reply`);
+      }
+
       const response = await fetch(`${this.baseURL}/generate-reply`, {
         method: "POST",
         headers: {
@@ -42,13 +76,17 @@ class HumanRepliesAPI {
       }
 
       const data = await response.json();
+      
+      // Store the reply in the backend for analytics
+      await this.storeReply(context, data.reply, options);
+      
       return {
         reply: data.reply,
         remainingReplies: data.remainingReplies,
         isLimitReached: data.remainingReplies <= 0,
       };
     } catch (error) {
-      console.error("SaaS API error:", error);
+      console.error("Backend API error:", error);
       throw error;
     }
   }
@@ -157,8 +195,43 @@ class HumanRepliesAPI {
     });
   }
 
+  async storeReply(originalPost, generatedReply, options = {}) {
+    // Store reply in backend for dashboard analytics
+    if (this.fallbackMode) {
+      return; // Skip storing in fallback mode
+    }
+
+    try {
+      const response = await fetch(`${this.baseURL}/replies`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await this.getUserToken()}`,
+        },
+        body: JSON.stringify({
+          original_post: originalPost,
+          generated_reply: generatedReply,
+          service_type: options.platform || "x",
+          post_url: options.postUrl || null,
+          metadata: {
+            tone: options.tone,
+            length: options.length,
+            timestamp: new Date().toISOString()
+          }
+        }),
+      });
+
+      if (this.debugMode && response.ok) {
+        console.log("Reply stored successfully for analytics");
+      }
+    } catch (error) {
+      console.warn("Failed to store reply for analytics:", error);
+      // Don't throw - this shouldn't break the main functionality
+    }
+  }
+
   async checkUserLimits() {
-    // Future implementation - check daily limits
+    // Check daily limits from your backend
     if (this.fallbackMode) {
       return { remainingReplies: null, isLimitReached: false };
     }

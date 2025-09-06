@@ -9,7 +9,11 @@
   ],
   "host_permissions": [
     "https://x.com/*",
-    "https://twitter.com/*"
+    "https://twitter.com/*",
+    "http://localhost:8000/*",
+    "https://api.humanreplies.com/*",
+    "https://staging-api.humanreplies.com/*",
+    "https://text.pollinations.ai/*"
   ],
   "content_scripts": [
     {
@@ -18,6 +22,7 @@
         "https://twitter.com/*"
       ],
       "js": [
+        "config/environment.js",
         "core/api-service.js",
         "platforms/x-integration.js"
       ],
@@ -30,6 +35,7 @@
         "https://www.linkedin.com/*"
       ],
       "js": [
+        "config/environment.js",
         "core/api-service.js",
         "platforms/linkedin-integration.js"
       ],
@@ -50,5 +56,6 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "HumanReplies"
-  }
+  },
+  "options_page": "options.html"
 }
