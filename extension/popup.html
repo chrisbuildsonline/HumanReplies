@@ -19,15 +19,6 @@
       padding: 16px 0;
     }
 
-    .logo {
-      font-size: 28px;
-      font-weight: 700;
-      color: #2c3e50;
-      margin: 0;
-      letter-spacing: -0.5px;
-      line-height: 1.2;
-    }
-
     .title {
       font-size: 28px;
       font-weight: 700;
@@ -86,20 +77,132 @@
       border-radius: 10px;
       margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .status.logged-in {
       border: 1px solid #27ae60;
+    }
+
+    .status.logged-out {
+      border: 1px solid #e74c3c;
     }
 
     .status-text {
       font-size: 13px;
-      color: #27ae60;
       font-weight: 600;
+    }
+
+    .status-text.logged-in {
+      color: #27ae60;
+    }
+
+    .status-text.logged-out {
+      color: #e74c3c;
     }
 
     .status-indicator {
       width: 10px;
       height: 10px;
-      background: #27ae60;
       border-radius: 50%;
+    }
+
+    .status-indicator.logged-in {
+      background: #27ae60;
+    }
+
+    .status-indicator.logged-out {
+      background: #e74c3c;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      padding: 14px;
+      background: #fff;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border: 1px solid #27ae60;
+    }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #27ae60;
+      margin-right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .user-details {
+      flex: 1;
+    }
+
+    .user-name {
+      font-size: 13px;
+      color: #2c3e50;
+      font-weight: 600;
+      margin: 0 0 2px 0;
+    }
+
+    .user-email {
+      font-size: 11px;
+      color: #7f8c8d;
+      margin: 0;
+    }
+
+    .login-section {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .login-button {
+      background: #2c3e50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .login-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(44, 62, 80, 0.3);
+      background: #34495e;
+    }
+
+    .logout-button {
+      background: transparent;
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .logout-button:hover {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .login-description {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-top: 8px;
+      line-height: 1.4;
     }
 
     .shortcut {
@@ -155,9 +258,31 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
-    /* No dark mode. Only brand accent colors. */
+    .disabled-overlay {
+      position: relative;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .disabled-overlay::after {
+      content: '🔒 Login for advanced features';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(44, 62, 80, 0.9);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .hidden {
+      display: none;
+    }
   </style>
-  <script src="popup.js"></script>
 </head>
 
 <body>
@@ -166,67 +291,222 @@
     <p class="subtitle">AI-Powered Reply Generation</p>
   </div>
 
-  <div class="status">
-    <span class="status-text">Extension Active</span>
-    <div class="status-indicator"></div>
+  <!-- User logged out state -->
+  <div id="loggedOutState">
+    <div class="status logged-in" id="extensionStatus">
+      <span class="status-text logged-in" id="statusText">Extension Active</span>
+      <div class="status-indicator logged-in" id="statusIndicator"></div>
+    </div>
+
+    <div class="login-section">
+      <button class="login-button" onclick="handleLogin()">
+        🚀 Login to HumanReplies
+      </button>
+      <div class="login-description">
+        Sign in to create custom tones and save your preferences
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Basic Settings</div>
+      <div class="setting-item">
+        <div class="setting-label">Default Reply Tone</div>
+        <div class="setting-description">Choose from preset tones (Login to create custom ones)</div>
+        <select id="replyToneSelectLoggedOut" class="setting-select" onchange="saveToneSetting(this.value)">
+          <option value="ask">Always ask me</option>
+          <option value="neutral">👍 Neutral</option>
+          <option value="joke">😂 Joke</option>
+          <option value="support">❤️ Support</option>
+          <option value="idea">💡 Idea</option>
+          <option value="question">❓ Question</option>
+          <option value="confident">💪 Confident</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="disabled-overlay">
+      <div class="section">
+        <div class="section-title">Logged In Benefits</div>
+        <div class="feature">
+          <span class="feature-icon">📊</span>
+          <span class="feature-text">Track your statistics</span>
+        </div>
+        <div class="feature">
+          <span class="feature-icon">🎨</span>
+          <span class="feature-text">Customize and add own tones</span>
+        </div>
+        <div class="feature">
+          <span class="feature-icon">🗣️</span>
+          <span class="feature-text">Write in your voice</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">Features</div>
-    <div class="feature">
-      <span class="feature-icon">🧠</span>
-      <span class="feature-text">Generate thoughtful replies</span>
+  <!-- User logged in state -->
+  <div id="loggedInState" class="hidden">
+    <div class="user-info">
+      <div class="user-avatar">JD</div>
+      <div class="user-details">
+        <div class="user-name">John Doe</div>
+        <div class="user-email">john.doe@example.com</div>
+      </div>
+      <button class="logout-button" onclick="handleLogout()">Logout</button>
     </div>
-    <div class="feature">
-      <span class="feature-icon">⚡</span>
-      <span class="feature-text">Instant AI-powered responses</span>
-    </div>
-    <div class="feature">
-      <span class="feature-icon">🎯</span>
-      <span class="feature-text">Context-aware suggestions</span>
-    </div>
-    <div class="feature">
-      <span class="feature-icon">🔒</span>
-      <span class="feature-text">Unlimited free replies daily</span>
-    </div>
-  </div>
 
-  <div class="section">
-    <div class="section-title">Settings</div>
-    <div class="setting-item">
-      <div class="setting-label">Default Reply Tone</div>
-      <div class="setting-description">Choose your preferred tone for generated replies</div>
-      <select id="replyToneSelect" class="setting-select">
-        <option value="ask">Always ask me</option>
-        <option value="neutral">👍 Neutral</option>
-        <option value="joke">😂 Joke</option>
-        <option value="support">❤️ Support</option>
-        <option value="idea">💡 Idea</option>
-        <option value="question">❓ Question</option>
-        <option value="confident">💪 Confident</option>
-      </select>
+    <div class="section">
+      <div class="section-title">Features</div>
+      <div class="feature">
+        <span class="feature-icon">🧠</span>
+        <span class="feature-text">Generate thoughtful replies</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">⚡</span>
+        <span class="feature-text">Instant AI-powered responses</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🎯</span>
+        <span class="feature-text">Context-aware suggestions</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🔒</span>
+        <span class="feature-text">Unlimited free replies daily</span>
+      </div>
     </div>
-  </div>
 
-  <div class="section">
-    <div class="section-title">How to Use</div>
-    <div class="feature">
-      <span class="feature-icon">1️⃣</span>
-      <span class="feature-text">Visit supported social platforms</span>
+    <div class="section">
+      <div class="section-title">Advanced Settings</div>
+      <div class="setting-item">
+        <div class="setting-label">Custom Reply Tones</div>
+        <div class="setting-description">Create and manage your own personalized tone presets</div>
+        <select id="replyToneSelect" class="setting-select" onchange="saveToneSetting(this.value)">
+          <option value="ask">Always ask me</option>
+          <option value="neutral">👍 Neutral</option>
+          <option value="joke">😂 Joke</option>
+          <option value="support">❤️ Support</option>
+          <option value="idea">💡 Idea</option>
+          <option value="question">❓ Question</option>
+          <option value="confident">💪 Confident</option>
+          <option value="custom1">🎨 My Professional Tone</option>
+          <option value="custom2">🌟 My Friendly Tone</option>
+          <option value="custom3">🔥 My Witty Tone</option>
+        </select>
+      </div>
+      <div class="setting-item">
+        <div class="setting-label">Tone Management</div>
+        <div class="setting-description">Add, edit, or delete your custom tone presets</div>
+        <button class="login-button" style="width: auto; padding: 8px 16px; font-size: 12px; margin: 0;">
+          + Add Custom Tone
+        </button>
+      </div>
     </div>
-    <div class="feature">
-      <span class="feature-icon">2️⃣</span>
-      <span class="feature-text">Look for reply areas</span>
-    </div>
-    <div class="feature">
-      <span class="feature-icon">3️⃣</span>
-      <span class="feature-text">Click "🧠 Generate Reply"</span>
+
+    <div class="section">
+      <div class="section-title">How to Use</div>
+      <div class="feature">
+        <span class="feature-icon">1️⃣</span>
+        <span class="feature-text">Visit supported social platforms</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">2️⃣</span>
+        <span class="feature-text">Look for reply areas</span>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">3️⃣</span>
+        <span class="feature-text">Click "🧠 Generate Reply"</span>
+      </div>
     </div>
   </div>
 
   <div class="footer">
-    <p>Currently supports X (Twitter)</p>
+    <p>Version 1.0.0</p>
   </div>
+
+  <script>
+    // Simulate login state - in real extension this would check actual auth
+    let isLoggedIn = false;
+    let currentTone = 'ask'; // Default tone
+
+    function checkCurrentSite() {
+      const supportedSites = [
+        'x.com', 'twitter.com', 'linkedin.com', 'facebook.com'
+      ];
+      
+      // For demo - you can change this to test different states
+      const currentSite = 'x.com'; // Change to test: 'x.com', 'linkedin.com', 'facebook.com', 'unsupported.com'
+      
+      const statusElement = document.getElementById('statusText');
+      const statusIndicator = document.getElementById('statusIndicator');
+      const statusContainer = document.getElementById('extensionStatus');
+      
+      if (supportedSites.includes(currentSite)) {
+        statusElement.textContent = 'Extension Active';
+        statusContainer.classList.remove('logged-out');
+        statusContainer.classList.add('logged-in');
+        statusElement.classList.remove('logged-out');
+        statusElement.classList.add('logged-in');
+        statusIndicator.classList.remove('logged-out');
+        statusIndicator.classList.add('logged-in');
+      } else {
+        statusElement.textContent = 'Extension Offline (Website not supported)';
+        statusContainer.classList.remove('logged-in');
+        statusContainer.classList.add('logged-out');
+        statusElement.classList.remove('logged-in');
+        statusElement.classList.add('logged-out');
+        statusIndicator.classList.remove('logged-in');
+        statusIndicator.classList.add('logged-out');
+      }
+    }
+
+    function handleLogin() {
+      console.log('Opening login flow...');
+      
+      setTimeout(() => {
+        isLoggedIn = true;
+        updateUIState();
+      }, 1000);
+    }
+
+    function handleLogout() {
+      isLoggedIn = false;
+      updateUIState();
+    }
+
+    function saveToneSetting(tone) {
+      currentTone = tone;
+      console.log('Tone setting saved:', tone);
+    }
+
+    function loadToneSetting() {
+      const loggedOutSelect = document.getElementById('replyToneSelectLoggedOut');
+      const loggedInSelect = document.getElementById('replyToneSelect');
+      
+      if (loggedOutSelect) loggedOutSelect.value = currentTone;
+      if (loggedInSelect) loggedInSelect.value = currentTone;
+    }
+
+    function updateUIState() {
+      const loggedOutState = document.getElementById('loggedOutState');
+      const loggedInState = document.getElementById('loggedInState');
+
+      if (isLoggedIn) {
+        loggedOutState.classList.add('hidden');
+        loggedInState.classList.remove('hidden');
+      } else {
+        loggedOutState.classList.remove('hidden');
+        loggedInState.classList.add('hidden');
+      }
+      
+      setTimeout(loadToneSetting, 50);
+    }
+
+    // Initialize UI state on load
+    document.addEventListener('DOMContentLoaded', function() {
+      checkCurrentSite();
+      updateUIState();
+      loadToneSetting();
+    });
+  </script>
 </body>
 
 </html>

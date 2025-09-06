@@ -6,17 +6,14 @@ class EnvironmentConfig {
     this.environments = {
       development: {
         apiBaseURL: "http://localhost:8000/api/v1",
-        pollinationsURL: "https://text.pollinations.ai",
         debug: true,
       },
       staging: {
         apiBaseURL: "https://staging-api.humanreplies.com/v1",
-        pollinationsURL: "https://text.pollinations.ai",
         debug: true,
       },
       production: {
         apiBaseURL: "https://api.humanreplies.com/v1",
-        pollinationsURL: "https://text.pollinations.ai",
         debug: false,
       },
     };
@@ -74,9 +71,7 @@ class EnvironmentConfig {
     return this.getConfig().apiBaseURL;
   }
 
-  getPollinationsURL() {
-    return this.getConfig().pollinationsURL;
-  }
+  // Removed getPollinationsURL() - now fetched from backend
 
   isDebugMode() {
     return this.getConfig().debug;
