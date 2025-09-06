@@ -205,7 +205,8 @@ async def generate_reply(
         
         # Make request to pollinations
         async with httpx.AsyncClient(timeout=30.0) as client:
-            encoded_prompt = httpx._utils.quote(prompt, safe='')
+            from urllib.parse import quote
+            encoded_prompt = quote(prompt, safe='')
             url = f"{pollinations_service.url}/{encoded_prompt}"
             
             response = await client.get(url, headers={"Accept": "text/plain"})

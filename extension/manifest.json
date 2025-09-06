@@ -5,7 +5,9 @@
   "description": "AI-powered reply generation for social media platforms",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://x.com/*",
@@ -13,7 +15,9 @@
     "http://localhost:8000/*",
     "https://api.humanreplies.com/*",
     "https://staging-api.humanreplies.com/*",
-    "https://text.pollinations.ai/*"
+    "https://text.pollinations.ai/*",
+    "https://app.humanreplies.com/*",
+    "https://anhcptguetscsoejzyed.supabase.co/*"
   ],
   "content_scripts": [
     {
@@ -57,5 +61,11 @@
     "default_popup": "popup.html",
     "default_title": "HumanReplies"
   },
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["auth-callback.html"],
+      "matches": ["https://anhcptguetscsoejzyed.supabase.co/*"]
+    }
+  ]
 }

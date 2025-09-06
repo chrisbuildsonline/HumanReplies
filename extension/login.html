@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HumanReplies Login</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: #f6f1e8;
+      color: #2c3e50;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin: 0 0 8px 0;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #7f8c8d;
+      margin: 0;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #2c3e50;
+    }
+
+    .login-button {
+      background: #2c3e50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+
+    .login-button:hover {
+      background: #34495e;
+    }
+
+    .login-button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    .error-message {
+      background: #e74c3c;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .success-message {
+      background: #27ae60;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .link-button {
+      background: none;
+      border: none;
+      color: #2c3e50;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="title">Login to HumanReplies</h1>
+    <p class="subtitle">Sign in to access your account</p>
+  </div>
+
+  <div id="errorMessage" class="error-message"></div>
+  <div id="successMessage" class="success-message"></div>
+
+  <form id="loginForm">
+    <div class="form-group">
+      <label class="form-label" for="email">Email</label>
+      <input type="email" id="email" class="form-input" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="password">Password</label>
+      <input type="password" id="password" class="form-input" required>
+    </div>
+
+    <button type="submit" id="loginButton" class="login-button">
+      Sign In
+    </button>
+  </form>
+
+  <div class="text-center">
+    <button class="link-button" onclick="openSignup()">
+      Don't have an account? Sign up
+    </button>
+  </div>
+
+  <script src="config/environment.js"></script>
+  <script src="core/api-service.js"></script>
+  <script>
+    class LoginManager {
+      constructor() {
+        this.api = new HumanRepliesAPI();
+        this.setupEventListeners();
+      }
+
+      setupEventListeners() {
+        const form = document.getElementById('loginForm');
+        form.addEventListener('submit', (e) => this.handleLogin(e));
+      }
+
+      async handleLogin(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const button = document.getElementById('loginButton');
+        
+        if (!email || !password) {
+          this.showError('Please fill in all fields');
+          return;
+        }
+
+        try {
+          button.disabled = true;
+          button.textContent = 'Signing in...';
+          
+          const response = await fetch(`${this.api.baseURL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            // Store auth data
+            await new Promise((resolve) => {
+              chrome.storage.sync.set({
+                userToken: data.access_token,
+                userProfile: data.user
+              }, resolve);
+            });
+
+            this.showSuccess('Login successful! You can close this window.');
+            
+            // Close this window after a delay
+            setTimeout(() => {
+              window.close();
+            }, 2000);
+            
+          } else {
+            this.showError(data.detail || 'Login failed');
+          }
+        } catch (error) {
+          console.error('Login error:', error);
+          this.showError('Network error. Please try again.');
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Sign In';
+        }
+      }
+
+      showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        const successDiv = document.getElementById('successMessage');
+        
+        successDiv.style.display = 'none';
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+      }
+
+      showSuccess(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        const successDiv = document.getElementById('successMessage');
+        
+        errorDiv.style.display = 'none';
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+      }
+    }
+
+    function openSignup() {
+      chrome.tabs.create({ url: 'https://app.humanreplies.com/auth/signup' });
+    }
+
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      new LoginManager();
+    });
+  </script>
+</body>
+</html>

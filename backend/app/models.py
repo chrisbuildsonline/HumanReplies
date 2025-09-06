@@ -157,6 +157,6 @@ class ExternalServiceUrl(Base):
     is_active = Column(Boolean, default=True)
     last_checked = Column(DateTime, default=datetime.utcnow)
     cache_expires_at = Column(DateTime, nullable=True)
-    metadata = Column(Text, nullable=True)  # JSON for additional service info
+    service_metadata = Column(Text, nullable=True)  # JSON for additional service info
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

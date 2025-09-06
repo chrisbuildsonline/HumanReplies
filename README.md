@@ -103,8 +103,10 @@ npm run dev
 - 🧠 **Smart Reply Generation**: Context-aware AI responses
 - ⚡ **Instant Integration**: Works directly in social media interfaces
 - 🎯 **Multi-Platform**: X (Twitter), LinkedIn, Facebook support
-- 🔧 **Configurable**: Environment switching and custom API endpoints
+- 🔐 **User Authentication**: Secure login with dashboard integration
+- 🎨 **Custom Tones**: Personalized reply styles (logged-in users)
 - 📊 **Analytics**: Automatic reply tracking for dashboard
+- 🔧 **Configurable**: Environment switching and custom API endpoints
 
 ### Supported Platforms
 - **X (Twitter)**: Full integration with reply generation
@@ -123,23 +125,54 @@ extension/
 ├── manifest.json              # Extension configuration
 ├── config/environment.js      # Environment management
 ├── core/api-service.js        # API communication
+├── supabase-client.js        # Supabase authentication client
 ├── platforms/x-integration.js # X (Twitter) integration
-├── options.html              # Settings page
-└── popup.html               # Extension popup
+├── popup.html                # Extension popup with login/signup
+├── popup.js                  # Popup authentication logic
+├── auth-callback.html        # Supabase auth redirect handler
+├── options.html             # Settings page
+└── styles.css              # Extension styling
 ```
 
 ### Installation & Usage
+
+#### Basic Setup
 1. Load unpacked extension in Chrome developer mode
 2. Navigate to supported social media platform
 3. Look for "🧠 Generate Reply" button
 4. Click to generate AI-powered response
 5. Reply is automatically inserted
 
+#### Authentication & Advanced Features
+1. **Login**: Click extension popup → "🚀 Login to HumanReplies"
+2. **Signup**: Click extension popup → "✨ Create Account"
+3. **Supabase Auth**: Secure popup with hosted Supabase authentication
+4. **Auto-Refresh**: Seamless token refresh for uninterrupted usage
+5. **Dashboard Link**: Direct access to analytics at app.humanreplies.com
+
+#### User States
+- **Logged Out**: Basic preset tones, limited features
+- **Logged In**: Custom tones, analytics tracking, dashboard access
+
 ### Configuration
 - **Settings Page**: Right-click extension → Options
 - **Environment Switching**: Development/Staging/Production
 - **Custom API URLs**: Override default endpoints
 - **Debug Mode**: Console logging for development
+
+### Authentication Flow
+1. **Login Trigger**: User clicks "Login" or "Create Account" in extension popup
+2. **Supabase Auth**: Opens Supabase hosted auth UI in secure popup window
+3. **Token Extraction**: Extension captures JWT tokens from auth callback
+4. **Token Storage**: Stores access/refresh tokens securely in Chrome storage
+5. **Auto-Refresh**: Automatic token refresh when expired using refresh token
+6. **User Profile**: Fetches user data from Supabase and syncs with backend
+
+### API Integration
+- **Authentication**: JWT tokens from Supabase Auth
+- **Reply Generation**: POST /api/v1/services/generate-reply
+- **User Profile**: GET /api/v1/auth/me
+- **Analytics**: Automatic reply tracking to backend database
 
 ---
 
@@ -186,7 +219,7 @@ extension/
 - `GET /urls` - Get all external service URLs (cached for 1 hour)
 - `GET /urls/{service_name}` - Get specific service URL
 - `POST /urls/{service_name}/refresh` - Force refresh service URL cache
-- `POST /generate-reply` - Generate reply using external AI service (proxied)
+- `POST /generate-reply` - Generate reply using external AI service (requires authentication)
 
 ### Database Schema
 
