@@ -261,6 +261,161 @@ class HumanRepliesAPI {
       return null;
     }
   }
+
+  async getTones() {
+    // Get available tones from backend (includes user's custom tones if authenticated)
+    try {
+      // Ensure config is loaded
+      if (!this.baseURL) {
+        await this.initializeConfig();
+      }
+
+      if (this.debugMode) {
+        console.log(`Fetching tones from: ${this.baseURL}/tones`);
+      }
+
+      // Get the token if available
+      const userToken = await this.getUserToken();
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      // Add authorization header if we have a token
+      if (userToken) {
+        headers.Authorization = `Bearer ${userToken}`;
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/`, {
+        method: "GET",
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch tones: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (this.debugMode) {
+        console.log("Tones fetched:", data);
+      }
+
+      return data.tones || [];
+    } catch (error) {
+      console.error("Failed to fetch tones:", error);
+      
+      // Return fallback tones if API fails
+      return [
+        { name: "ask", display_name: "Always ask me" },
+        { name: "neutral", display_name: "👍 Neutral" },
+        { name: "joke", display_name: "😂 Joke" },
+        { name: "support", display_name: "❤️ Support" },
+        { name: "idea", display_name: "💡 Idea" },
+        { name: "question", display_name: "❓ Question" },
+        { name: "confident", display_name: "💪 Confident" }
+      ];
+    }
+  }
+
+  async createCustomTone(toneData) {
+    // Create a custom tone for the authenticated user
+    try {
+      if (!this.baseURL) {
+        await this.initializeConfig();
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to create custom tones");
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(toneData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to create tone: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to create custom tone:", error);
+      throw error;
+    }
+  }
+
+  async updateCustomTone(toneId, toneData) {
+    // Update a custom tone
+    try {
+      if (!this.baseURL) {
+        await this.initializeConfig();
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to update custom tones");
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(toneData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to update tone: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to update custom tone:", error);
+      throw error;
+    }
+  }
+
+  async deleteCustomTone(toneId) {
+    // Delete a custom tone
+    try {
+      if (!this.baseURL) {
+        await this.initializeConfig();
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to delete custom tones");
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${userToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete tone: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to delete custom tone:", error);
+      throw error;
+    }
+  }
 }
 
 // Export for use in other modules

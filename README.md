@@ -104,7 +104,7 @@ npm run dev
 - ⚡ **Instant Integration**: Works directly in social media interfaces
 - 🎯 **Multi-Platform**: X (Twitter), LinkedIn, Facebook support
 - 🔐 **User Authentication**: Secure login with dashboard integration
-- 🎨 **Custom Tones**: Personalized reply styles (logged-in users)
+- 🎨 **Dynamic Tones**: API-driven tone selection with preset options and custom user tones
 - 📊 **Analytics**: Automatic reply tracking for dashboard
 - 🔧 **Configurable**: Environment switching and custom API endpoints
 
@@ -152,7 +152,11 @@ extension/
 
 #### User States
 - **Logged Out**: Basic preset tones, limited features
-- **Logged In**: Custom tones, analytics tracking, dashboard access
+- **Logged In**: Custom tones management, analytics tracking, dashboard access
+  - Create custom tones with personalized names and descriptions
+  - Edit existing custom tones to refine your voice
+  - Delete custom tones you no longer need
+  - All custom tones appear alongside presets in tone selector
 
 ### Configuration
 - **Settings Page**: Right-click extension → Options
@@ -168,9 +172,31 @@ extension/
 5. **Auto-Refresh**: Automatic token refresh when expired using refresh token
 6. **User Profile**: Fetches user data from Supabase and syncs with backend
 
+### Tone System
+- **Dynamic Loading**: Tones fetched from backend API on popup load
+- **Preset Tones**: System-defined tones with emojis and descriptions
+  - 👍 Neutral - Balanced and helpful tone
+  - 😂 Joke - Funny and light-hearted tone
+  - ❤️ Support - Supportive and encouraging tone
+  - 💡 Idea - Innovative and creative suggestions
+  - ❓ Question - Thoughtful conversation starters
+  - 💪 Confident - Assertive and confident tone
+- **Custom User Tones**: Authenticated users can create, edit, and delete custom tones
+  - Personal tone library for consistent voice
+  - Custom display names and descriptions
+  - Seamless integration with preset tones
+- **Authentication-Aware**: Logged-in users see both preset and custom tones
+- **Fallback Support**: Hardcoded fallback if API unavailable
+- **Extensible**: Backend-managed for easy tone additions
+
 ### API Integration
 - **Authentication**: JWT tokens from Supabase Auth
 - **Reply Generation**: POST /api/v1/services/generate-reply
+- **Tones Management**: 
+  - GET /api/v1/tones/ - Dynamic tone loading (includes custom tones for authenticated users)
+  - POST /api/v1/tones/ - Create custom tone
+  - PUT /api/v1/tones/{id} - Update custom tone
+  - DELETE /api/v1/tones/{id} - Delete custom tone
 - **User Profile**: GET /api/v1/auth/me
 - **Analytics**: Automatic reply tracking to backend database
 
@@ -193,6 +219,7 @@ extension/
 - 📝 **Reply Management**: Store and analyze user-generated replies
 - 📊 **Dashboard Statistics**: Real-time analytics and insights
 - 🔧 **Multi-platform Support**: Extensible service type system
+- 🎨 **Custom Tones**: User-specific tone creation and management
 - 🛡️ **Type Safety**: Pydantic models for all API interactions
 
 ### API Endpoints
@@ -220,6 +247,13 @@ extension/
 - `GET /urls/{service_name}` - Get specific service URL
 - `POST /urls/{service_name}/refresh` - Force refresh service URL cache
 - `POST /generate-reply` - Generate reply using external AI service (requires authentication)
+
+#### Tones (`/api/v1/tones`)
+- `GET /` - Get all active tones (presets + user's custom tones if authenticated)
+- `GET /presets` - Get only preset tones (system defaults)
+- `POST /` - Create custom tone (requires authentication)
+- `PUT /{tone_id}` - Update custom tone (requires authentication, owner only)
+- `DELETE /{tone_id}` - Delete custom tone (requires authentication, owner only)
 
 ### Database Schema
 
@@ -268,6 +302,25 @@ CREATE TABLE external_service_urls (
 );
 ```
 
+#### Tones Table
+```sql
+CREATE TABLE tones (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR NOT NULL,
+    display_name VARCHAR NOT NULL,
+    description VARCHAR,
+    is_preset BOOLEAN DEFAULT true,
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL for presets, user ID for custom tones
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Index for performance
+CREATE INDEX idx_tones_user_id ON tones(user_id);
+```
+
 ### Environment Variables
 ```env
 # Supabase (Auth only)
@@ -314,6 +367,9 @@ The backend now manages all external service URLs with automatic caching:
 ```bash
 # Setup database
 python setup_db.py
+
+# Setup default tones (run once after database setup)
+python setup_tones.py
 
 # Generate migration
 alembic revision --autogenerate -m "description"

@@ -115,6 +115,25 @@ class GenerateReplyResponse(BaseModel):
     is_limit_reached: bool = False
     service_used: str = "pollinations"
 
+# Tone Models
+class ToneResponse(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    is_preset: bool = True
+    is_active: bool = True
+    sort_order: int = 0
+    user_id: Optional[str] = None
+
+class ToneCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50, description="Tone identifier (lowercase, no spaces)")
+    display_name: str = Field(..., min_length=1, max_length=100, description="Display name for the tone")
+    description: Optional[str] = Field(None, max_length=500, description="Optional description of the tone")
+
+class TonesListResponse(BaseModel):
+    tones: List[ToneResponse]
+
 # SQLAlchemy Models (Database)
 class User(Base):
     __tablename__ = "users"
@@ -160,3 +179,20 @@ class ExternalServiceUrl(Base):
     service_metadata = Column(Text, nullable=True)  # JSON for additional service info
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Tone(Base):
+    __tablename__ = "tones"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False, index=True)  # e.g., "neutral", "joke"
+    display_name = Column(String, nullable=False)  # e.g., "👍 Neutral", "😂 Joke"
+    description = Column(String, nullable=True)  # Optional description
+    is_preset = Column(Boolean, default=True)  # True for system presets, False for user custom
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)  # For ordering in UI
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)  # NULL for presets, user ID for custom tones
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="custom_tones")

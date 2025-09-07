@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Custom Tones</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .tone-item { padding: 10px; margin: 5px 0; background: #f5f5f5; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>HumanReplies Custom Tones Test</h1>
+    
+    <div class="section">
+        <h2>1. Test Tones API (No Auth)</h2>
+        <button onclick="testTonesAPI()">Fetch Tones</button>
+        <div id="tones-result"></div>
+    </div>
+
+    <div class="section">
+        <h2>2. Test Custom Tone Creation (Requires Auth)</h2>
+        <p>This will fail without authentication - which is expected behavior</p>
+        <button onclick="testCreateTone()">Try Create Custom Tone</button>
+        <div id="create-result"></div>
+    </div>
+
+    <div class="section">
+        <h2>3. Extension Integration Test</h2>
+        <p>Load the extension and check if:</p>
+        <ul>
+            <li>Tones are loaded from API in popup</li>
+            <li>Logged-out users see only preset tones</li>
+            <li>Logged-in users can manage custom tones</li>
+        </ul>
+    </div>
+
+    <script>
+        async function testTonesAPI() {
+            const resultDiv = document.getElementById('tones-result');
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/tones/');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Success! Found ${data.tones.length} tones:</div>
+                        ${data.tones.map(tone => `
+                            <div class="tone-item">
+                                <strong>${tone.display_name}</strong> (${tone.name})
+                                <br><small>${tone.description || 'No description'}</small>
+                                <br><small>Preset: ${tone.is_preset ? 'Yes' : 'No'}</small>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ Error: ${data.detail || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+
+        async function testCreateTone() {
+            const resultDiv = document.getElementById('create-result');
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/tones/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'test_tone',
+                        display_name: '🧪 Test Tone',
+                        description: 'A test tone for development'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">✅ Tone created successfully!</div>`;
+                } else {
+                    if (response.status === 403) {
+                        resultDiv.innerHTML = `<div class="success">✅ Expected behavior: Authentication required (${data.error})</div>`;
+                    } else {
+                        resultDiv.innerHTML = `<div class="error">❌ Unexpected error: ${data.detail || data.error}</div>`;
+                    }
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+
+        // Auto-run the tones test on page load
+        window.onload = () => {
+            testTonesAPI();
+        };
+    </script>
+</body>
+</html>
