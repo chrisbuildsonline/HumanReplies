@@ -20,37 +20,25 @@ class SupabaseClient {
       console.error(
         "Environment configuration not found. Supabase client may not work correctly."
       );
-      // Fallback values - should not be used in production
-      this.supabaseUrl = "https://anhcptguetscsoejzyed.supabase.co";
-      this.supabaseAnonKey =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw";
     }
-  }
-
-  // Generate Supabase Auth URL for popup
-  getAuthUrl(type = "signin") {
-    const params = new URLSearchParams({
-      apikey: this.supabaseAnonKey,
-      redirect_to: this.redirectUrl,
-      response_type: "token",
-    });
-
-    const endpoint = type === "signup" ? "signup" : "signin";
-    return `${this.supabaseUrl}/auth/v1/${endpoint}?${params.toString()}`;
   }
 
   // Open auth popup and handle the flow
   async authenticateWithPopup(type = "signin") {
+    // Open internal extension page (has chrome.* APIs) instead of data URL
     return new Promise((resolve, reject) => {
-      const authUrl = this.getAuthUrl(type);
+      const authPage = chrome.runtime.getURL(
+        `auth-ui.html?mode=${encodeURIComponent(type)}&url=${encodeURIComponent(
+          this.supabaseUrl
+        )}&key=${encodeURIComponent(this.supabaseAnonKey)}`
+      );
 
-      // Create popup window
       chrome.windows.create(
         {
-          url: authUrl,
+          url: authPage,
           type: "popup",
-          width: 500,
-          height: 600,
+          width: 400,
+          height: 500,
           focused: true,
         },
         (window) => {
@@ -62,60 +50,89 @@ class SupabaseClient {
           const windowId = window.id;
           let authCompleted = false;
 
-          // Listen for tab updates to detect auth completion
-          const listener = (tabId, changeInfo, tab) => {
-            if (tab.windowId !== windowId || authCompleted) return;
-
-            if (changeInfo.url && changeInfo.url.includes(this.redirectUrl)) {
+          // Runtime message listener (preferred now)
+          const runtimeListener = (msg) => {
+            if (msg && msg.action === "authResult" && !authCompleted) {
               authCompleted = true;
-              chrome.tabs.onUpdated.removeListener(listener);
-
-              // Extract tokens from URL
-              try {
-                const url = new URL(changeInfo.url);
-                const fragment = url.hash.substring(1);
-                const params = new URLSearchParams(fragment);
-
-                const accessToken = params.get("access_token");
-                const refreshToken = params.get("refresh_token");
-                const expiresIn = params.get("expires_in");
-                const tokenType = params.get("token_type");
-
-                if (accessToken) {
-                  // Close the popup
-                  chrome.windows.remove(windowId);
-
-                  resolve({
-                    access_token: accessToken,
-                    refresh_token: refreshToken,
-                    expires_in: parseInt(expiresIn),
-                    token_type: tokenType,
-                  });
-                } else {
-                  chrome.windows.remove(windowId);
-                  reject(new Error("No access token received"));
-                }
-              } catch (error) {
-                chrome.windows.remove(windowId);
-                reject(new Error("Failed to parse auth response"));
+              try { chrome.windows.remove(windowId); } catch(e) {}
+              chrome.runtime.onMessage.removeListener(runtimeListener);
+              if (msg.success && msg.data && msg.data.access_token) {
+                resolve(msg.data);
+              } else if (msg.cancelled) {
+                reject(new Error("Authentication cancelled by user"));
+              } else {
+                reject(new Error(msg.error || "Authentication failed"));
               }
             }
           };
+          chrome.runtime.onMessage.addListener(runtimeListener);
 
-          chrome.tabs.onUpdated.addListener(listener);
+          // Keep legacy storage polling as fallback
+          const storagePoller = setInterval(() => {
+            chrome.storage.local.get(["auth_popup_result"], (result) => {
+              if (result.auth_popup_result && !authCompleted) {
+                const authResult = result.auth_popup_result;
+                // Check if this is a recent result (within last 30 seconds)
+                if (Date.now() - authResult.timestamp < 30000) {
+                  console.log("Auth result found in storage:", authResult);
+
+                  // Clear the storage result
+                  chrome.storage.local.remove(["auth_popup_result"]);
+
+                  if (authResult.type === "AUTH_SUCCESS") {
+                    authCompleted = true;
+                    clearInterval(checkWindowClosed);
+                    clearInterval(storagePoller);
+                    chrome.runtime.onMessage.removeListener(runtimeListener);
+                    chrome.windows.onRemoved.removeListener(
+                      windowRemovedListener
+                    );
+                    chrome.windows.remove(windowId);
+                    resolve(authResult.data);
+                  }
+                }
+              }
+            });
+          }, 500); // Check every 500ms
+
+          // (postMessage listener no longer needed with internal page)
+
+          // Poll to check if popup window is still open
+          const checkWindowClosed = setInterval(() => {
+            chrome.windows.get(windowId, (window) => {
+              if (chrome.runtime.lastError || !window) {
+                // Window was closed
+                if (!authCompleted) {
+                  authCompleted = true;
+                  clearInterval(checkWindowClosed);
+                  clearInterval(storagePoller);
+                  chrome.runtime.onMessage.removeListener(runtimeListener);
+                  reject(new Error("Authentication cancelled by user"));
+                }
+              }
+            });
+          }, 1000);
 
           // Handle popup closed by user
-          chrome.windows.onRemoved.addListener((closedWindowId) => {
+          const windowRemovedListener = (closedWindowId) => {
             if (closedWindowId === windowId && !authCompleted) {
-              chrome.tabs.onUpdated.removeListener(listener);
+              chrome.runtime.onMessage.removeListener(runtimeListener);
+              clearInterval(checkWindowClosed);
+              clearInterval(storagePoller);
+              chrome.windows.onRemoved.removeListener(windowRemovedListener);
               reject(new Error("Authentication cancelled by user"));
             }
-          });
+          };
+
+          chrome.windows.onRemoved.addListener(windowRemovedListener);
 
           // Timeout after 5 minutes
           setTimeout(() => {
             if (!authCompleted) {
-              chrome.tabs.onUpdated.removeListener(listener);
+              chrome.runtime.onMessage.removeListener(runtimeListener);
+              clearInterval(checkWindowClosed);
+              clearInterval(storagePoller);
+              chrome.windows.onRemoved.removeListener(windowRemovedListener);
               chrome.windows.remove(windowId);
               reject(new Error("Authentication timeout"));
             }
@@ -123,6 +140,11 @@ class SupabaseClient {
         }
       );
     });
+  }
+
+  // Legacy createAuthForm retained only for backward compatibility (unused)
+  createAuthForm() {
+    throw new Error("Deprecated: use internal auth-ui.html");
   }
 
   // Get user info from Supabase using access token

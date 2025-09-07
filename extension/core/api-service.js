@@ -203,11 +203,50 @@ class HumanRepliesAPI {
   // buildPrompt method removed - now handled by backend
 
   async getUserToken() {
-    // Future implementation - get user auth token
     return new Promise((resolve) => {
-      chrome.storage.sync.get(["userToken"], (result) => {
-        resolve(result.userToken || null);
-      });
+      const finish = (token, phase) => {
+        if (this.debugMode) {
+          console.log("[API] getUserToken =>", {
+            phase,
+            tokenPresent: !!token,
+          });
+        }
+        resolve(token || null);
+      };
+      try {
+        chrome.storage.sync.get(["userToken"], (result) => {
+          if (result && result.userToken) {
+            return finish(result.userToken, "sync");
+          }
+          chrome.storage.local.get(["userToken"], (localResult) => {
+            if (localResult && localResult.userToken) {
+              return finish(localResult.userToken, "local");
+            }
+            // Background cache fallback
+            try {
+              chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
+                const bgToken = resp?.auth?.userToken;
+                finish(bgToken, "background");
+              });
+            } catch (err) {
+              finish(null, "none");
+            }
+          });
+        });
+      } catch (e) {
+        console.warn("[API] getUserToken sync failed, trying local", e);
+        try {
+          chrome.storage.local.get(["userToken"], (localResult) => {
+            if (localResult && localResult.userToken) {
+              return finish(localResult.userToken, "local-ex");
+            }
+            finish(null, "ex-no-token");
+          });
+        } catch (err) {
+          console.error("[API] getUserToken local failure", err);
+          finish(null, "fatal");
+        }
+      }
     });
   }
 
@@ -303,7 +342,7 @@ class HumanRepliesAPI {
       return data.tones || [];
     } catch (error) {
       console.error("Failed to fetch tones:", error);
-      
+
       // Return fallback tones if API fails
       return [
         { name: "ask", display_name: "Always ask me" },
@@ -312,7 +351,7 @@ class HumanRepliesAPI {
         { name: "support", display_name: "❤️ Support" },
         { name: "idea", display_name: "💡 Idea" },
         { name: "question", display_name: "❓ Question" },
-        { name: "confident", display_name: "💪 Confident" }
+        { name: "confident", display_name: "💪 Confident" },
       ];
     }
   }
@@ -333,14 +372,16 @@ class HumanRepliesAPI {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${userToken}`,
+          Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify(toneData),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to create tone: ${response.status}`);
+        throw new Error(
+          errorData.detail || `Failed to create tone: ${response.status}`
+        );
       }
 
       const data = await response.json();
@@ -367,14 +408,16 @@ class HumanRepliesAPI {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${userToken}`,
+          Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify(toneData),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to update tone: ${response.status}`);
+        throw new Error(
+          errorData.detail || `Failed to update tone: ${response.status}`
+        );
       }
 
       const data = await response.json();
@@ -400,13 +443,15 @@ class HumanRepliesAPI {
       const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
         method: "DELETE",
         headers: {
-          "Authorization": `Bearer ${userToken}`,
+          Authorization: `Bearer ${userToken}`,
         },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to delete tone: ${response.status}`);
+        throw new Error(
+          errorData.detail || `Failed to delete tone: ${response.status}`
+        );
       }
 
       const data = await response.json();
