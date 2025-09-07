@@ -11,6 +11,7 @@ class PopupManager {
   }
 
   async init() {
+    // Since authentication is now optional, we'll check but not require it
     await this.checkAuthStatus();
     this.checkCurrentSite();
     this.updateUIState();
@@ -119,27 +120,24 @@ class PopupManager {
   }
 
   setupEventListeners() {
-    // Login and logout buttons are handled via inline onclick handlers
+    // Login button
+    const loginButton = document.getElementById("loginButton");
+    if (loginButton) {
+      loginButton.addEventListener("click", () => this.handleLogin());
+    }
 
-    // Dashboard button (add this to logged in state)
-    this.addDashboardButton();
-  }
+    // Signup button
+    const signupButton = document.getElementById("signupButton");
+    if (signupButton) {
+      signupButton.addEventListener("click", () => this.handleSignup());
+    }
 
-  addDashboardButton() {
-    // Add dashboard button to logged in state
-    const loggedInState = document.getElementById("loggedInState");
-    if (loggedInState) {
-      const dashboardBtn = document.createElement("button");
-      dashboardBtn.className = "login-button";
-      dashboardBtn.style.marginBottom = "16px";
-      dashboardBtn.innerHTML = "📊 Open Dashboard";
-      dashboardBtn.addEventListener("click", () => this.openDashboard());
-
-      // Insert after user info
-      const userInfo = loggedInState.querySelector(".user-info");
-      if (userInfo) {
-        userInfo.insertAdjacentElement("afterend", dashboardBtn);
-      }
+    // Tone selector
+    const toneSelect = document.getElementById("replyToneSelectLoggedOut");
+    if (toneSelect) {
+      toneSelect.addEventListener("change", (e) =>
+        this.saveToneSetting(e.target.value)
+      );
     }
   }
 
@@ -347,38 +345,35 @@ class PopupManager {
 
   updateUIState() {
     const loggedOutState = document.getElementById("loggedOutState");
-    const loggedInState = document.getElementById("loggedInState");
 
-    if (this.isLoggedIn && this.currentUser) {
-      // Update user info
-      const userAvatar = loggedInState.querySelector(".user-avatar");
-      const userName = loggedInState.querySelector(".user-name");
-      const userEmail = loggedInState.querySelector(".user-email");
-
-      if (userAvatar) {
-        const initials = this.currentUser.full_name
-          ? this.currentUser.full_name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .toUpperCase()
-          : this.currentUser.email[0].toUpperCase();
-        userAvatar.textContent = initials;
-      }
-
-      if (userName) {
-        userName.textContent = this.currentUser.full_name || "User";
-      }
-
-      if (userEmail) {
-        userEmail.textContent = this.currentUser.email;
-      }
-
-      loggedOutState.classList.add("hidden");
-      loggedInState.classList.remove("hidden");
-    } else {
+    // Since authentication is optional, we always show the main interface
+    // but we can enhance features if user is logged in
+    if (loggedOutState) {
       loggedOutState.classList.remove("hidden");
-      loggedInState.classList.add("hidden");
+
+      // Update login button text based on auth status
+      const loginButton = document.getElementById("loginButton");
+      if (loginButton) {
+        if (this.isLoggedIn && this.currentUser) {
+          loginButton.textContent = `👋 Welcome ${
+            this.currentUser.full_name || this.currentUser.email
+          }`;
+          loginButton.style.background = "#27ae60";
+        } else {
+          loginButton.textContent = "🚀 Login to HumanReplies";
+          loginButton.style.background = "#2c3e50";
+        }
+      }
+
+      // Enable/disable advanced features based on auth
+      const disabledOverlay = document.querySelector(".disabled-overlay");
+      if (disabledOverlay) {
+        if (this.isLoggedIn) {
+          disabledOverlay.classList.add("hidden");
+        } else {
+          disabledOverlay.classList.remove("hidden");
+        }
+      }
     }
 
     setTimeout(() => this.loadToneSetting(), 50);

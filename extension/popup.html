@@ -12,7 +12,6 @@
         sans-serif;
       margin: 0;
       background: #f6f1e8;
-      <div class="header"><h1 class="title">HumanReplies</h1><p class="subtitle">AI-Powered Reply Generation</p></div>< !-- User logged out state --><div id="loggedOutState"><div class="status" id="extensionStatus"><span class="status-text" id="statusText">Extension Active</span><div class="status-indicator" id="statusIndicator"></div></div>
     }
 
     .header {
@@ -291,7 +290,7 @@
 <body>
   <div class="header">
     <h1 class="title">HumanReplies</h1>
-    <p class="subtitle">AI-Powered Reply Generation</p>
+    <p class="subtitle">Your Next Reply, Ready in Seconds</p>
   </div>
 
   <div id="site-not-supported-view" class="hidden">
@@ -311,10 +310,10 @@
       </div>
 
       <div class="login-section">
-        <button class="login-button" onclick="handleLogin()">
+        <button class="login-button" id="loginButton">
           🚀 Login to HumanReplies
         </button>
-        <a class="login" onclick="handleSignup()" style="margin-top: 8px; cursor: pointer;">
+        <a class="login" id="signupButton" style="margin-top: 8px; cursor: pointer;">
           ✨ Create Account
         </a>
         <div class="login-description">
@@ -327,9 +326,9 @@
         <div class="setting-item">
           <div class="setting-label">Default Reply Tone</div>
           <div class="setting-description">
-            Choose from preset tones (Login to create custom ones)
+            Choose from preset tones
           </div>
-          <select id="replyToneSelectLoggedOut" class="setting-select" onchange="saveToneSetting(this.value)">
+          <select id="replyToneSelectLoggedOut" class="setting-select">
             <option value="ask">Always ask me</option>
             <option value="neutral">👍 Neutral</option>
             <option value="joke">😂 Joke</option>
