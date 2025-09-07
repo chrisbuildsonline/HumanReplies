@@ -559,6 +559,9 @@ class PopupManager {
       const tones = await this.api.getTones();
       this.allTones = tones; // Store for later use
 
+      // Debug: Log the tones to see their structure
+      console.log("LoadTones: All tones received:", tones);
+      
       // Populate both tone select elements
       const toneSelectLoggedOut = document.getElementById(
         "replyToneSelectLoggedOut"
@@ -567,21 +570,80 @@ class PopupManager {
 
       [toneSelectLoggedOut, toneSelectLoggedIn].forEach((toneSelect) => {
         if (toneSelect && tones.length > 0) {
-          // Clear existing options
-          toneSelect.innerHTML = "";
+          // Start fresh with just "Always ask me"
+          toneSelect.innerHTML = '<option value="ask">Always ask me</option>';
 
-          // Add tone options
-          tones.forEach((tone) => {
-            const option = document.createElement("option");
-            option.value = tone.name;
-            option.textContent = tone.display_name;
-            toneSelect.appendChild(option);
-          });
+          // Filter out "Always ask me" from the API response to avoid duplicates
+          const filteredTones = tones.filter(tone => tone.name !== "ask");
+
+          // Filter preset and custom tones from the filtered list
+          const presetTones = filteredTones.filter((tone) => 
+            tone.is_preset === true || 
+            // If is_preset is undefined/null, treat known preset tone names as presets
+            (tone.is_preset === undefined && ['neutral', 'joke', 'support', 'idea', 'question', 'confident'].includes(tone.name))
+          );
+          const customTones = filteredTones.filter((tone) => 
+            tone.is_preset === false || 
+            // If is_preset is undefined/null and it's not a known preset, treat as custom
+            (tone.is_preset === undefined && !['neutral', 'joke', 'support', 'idea', 'question', 'confident'].includes(tone.name))
+          );
+          
+          console.log(`LoadTones: Preset tones for ${toneSelect.id}:`, presetTones);
+          console.log(`LoadTones: Custom tones for ${toneSelect.id}:`, customTones);
+
+          // For logged-in users (replyToneSelect), show custom tones first, then presets
+          if (this.isLoggedIn && toneSelect.id === "replyToneSelect") {
+            // Add custom tones section first
+            if (customTones.length > 0) {
+              const customSeparator = document.createElement("option");
+              customSeparator.disabled = true;
+              customSeparator.textContent = "── Your Custom Tones ──";
+              toneSelect.appendChild(customSeparator);
+
+              customTones.forEach((tone) => {
+                const option = document.createElement("option");
+                option.value = tone.name;
+                option.textContent = tone.display_name;
+                toneSelect.appendChild(option);
+              });
+            }
+
+            // Add preset tones section after custom tones
+            if (presetTones.length > 0) {
+              const presetSeparator = document.createElement("option");
+              presetSeparator.disabled = true;
+              presetSeparator.textContent = "── Preset Tones ──";
+              toneSelect.appendChild(presetSeparator);
+
+              presetTones.forEach((tone) => {
+                const option = document.createElement("option");
+                option.value = tone.name;
+                option.textContent = tone.display_name;
+                toneSelect.appendChild(option);
+              });
+            }
+          } 
+          // For logged-out users (replyToneSelectLoggedOut), show only preset tones
+          else if (toneSelect.id === "replyToneSelectLoggedOut") {
+            if (presetTones.length > 0) {
+              const presetSeparator = document.createElement("option");
+              presetSeparator.disabled = true;
+              presetSeparator.textContent = "── Preset Tones ──";
+              toneSelect.appendChild(presetSeparator);
+
+              presetTones.forEach((tone) => {
+                const option = document.createElement("option");
+                option.value = tone.name;
+                option.textContent = tone.display_name;
+                toneSelect.appendChild(option);
+              });
+            }
+          }
         }
       });
     } catch (error) {
       console.error("Failed to load tones:", error);
-      // Keep the hardcoded options as fallback - they're already in the HTML
+      // Keep the existing "Always ask me" option as fallback
     }
   }
 
