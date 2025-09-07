@@ -5,8 +5,9 @@ class XIntegration {
     if (!button) return;
     button.disabled = false;
     button.style.opacity = "1";
-    button.innerHTML = '';
-    button.style.background = "linear-gradient(135deg, #1d9bf0 0%, #8b5cf6 100%)";
+    button.innerHTML = "";
+    button.style.background =
+      "linear-gradient(135deg, #1d9bf0 0%, #8b5cf6 100%)";
     setTimeout(() => {
       button.style.background = "";
     }, 1200);
@@ -18,7 +19,7 @@ class XIntegration {
     button.style.opacity = "1";
     button.innerHTML = '<span style="color:red;font-size:16px;">❌</span>';
     setTimeout(() => {
-      button.innerHTML = '';
+      button.innerHTML = "";
     }, 1500);
     if (message) alert("HumanReplies error: " + message);
   }
@@ -26,19 +27,20 @@ class XIntegration {
   clearTextareaContent(textarea) {
     if (!textarea) return;
     if (textarea.tagName === "TEXTAREA") {
-      textarea.value = '';
+      textarea.value = "";
     } else {
-      textarea.innerText = '';
-      textarea.textContent = '';
+      textarea.innerText = "";
+      textarea.textContent = "";
     }
   }
   showSuccessState(button, remainingReplies) {
     if (!button) return;
     button.disabled = false;
     button.style.opacity = "1";
-    button.innerHTML = '';
+    button.innerHTML = "";
     // Optionally show a checkmark or success indicator
-    button.style.background = "linear-gradient(135deg, #1d9bf0 0%, #8b5cf6 100%)";
+    button.style.background =
+      "linear-gradient(135deg, #1d9bf0 0%, #8b5cf6 100%)";
     setTimeout(() => {
       button.style.background = "";
     }, 1200);
@@ -50,7 +52,7 @@ class XIntegration {
     button.style.opacity = "1";
     button.innerHTML = '<span style="color:red;font-size:16px;">❌</span>';
     setTimeout(() => {
-      button.innerHTML = '';
+      button.innerHTML = "";
     }, 1500);
     // Optionally show alert
     if (message) alert("HumanReplies error: " + message);
@@ -59,23 +61,25 @@ class XIntegration {
   clearTextareaContent(textarea) {
     if (!textarea) return;
     if (textarea.tagName === "TEXTAREA") {
-      textarea.value = '';
+      textarea.value = "";
     } else {
       // For Draft.js, try to clear contenteditable
-      textarea.innerText = '';
-      textarea.textContent = '';
+      textarea.innerText = "";
+      textarea.textContent = "";
     }
   }
   showLoadingState(button) {
     if (!button) return;
     button.disabled = true;
     button.style.opacity = "0.6";
-    button.innerHTML = '<span class="humanreplies-loading-spinner" style="display:inline-block;width:18px;height:18px;border:2px solid #ccc;border-top:2px solid #1d9bf0;border-radius:50%;animation:spin 1s linear infinite;"></span>';
+    button.innerHTML =
+      '<span class="humanreplies-loading-spinner" style="display:inline-block;width:18px;height:18px;border:2px solid #ccc;border-top:2px solid #1d9bf0;border-radius:50%;animation:spin 1s linear infinite;"></span>';
     // Add spinner animation via CSS if not present
-    if (!document.getElementById('humanreplies-spinner-style')) {
-      const style = document.createElement('style');
-      style.id = 'humanreplies-spinner-style';
-      style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+    if (!document.getElementById("humanreplies-spinner-style")) {
+      const style = document.createElement("style");
+      style.id = "humanreplies-spinner-style";
+      style.textContent =
+        "@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }";
       document.head.appendChild(style);
     }
   }
@@ -120,11 +124,11 @@ class XIntegration {
   }
 
   init() {
-  this.log("Starting initialization...");
-  this.detectTheme();
-  this.injectReplyButtons();
-  this.observePageChanges();
-  // Removed call to undefined this.initTextSelectionToolbar();
+    this.log("Starting initialization...");
+    this.detectTheme();
+    this.injectReplyButtons();
+    this.observePageChanges();
+    // Removed call to undefined this.initTextSelectionToolbar();
   }
 
   detectTheme() {
@@ -674,13 +678,8 @@ class XIntegration {
     try {
       this.log("Calling API service...");
 
-      // Use shared buildPrompt from HumanRepliesAPI
-      const prompt = this.apiService.buildPrompt(tweetContext, {
-        platform: "x",
-        tone: selectedTone || "helpful",
-      });
-
-      const result = await this.apiService.generateReply(prompt, {
+      // Send context directly to generateReply (buildPrompt is now handled by backend)
+      const result = await this.apiService.generateReply(tweetContext, {
         platform: "x",
         tone: selectedTone || "helpful",
       });

@@ -1,11 +1,17 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.routers import auth, users, replies, services
 from app.config import settings
 from app.database import engine, Base
 import uvicorn
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Database initialization
 @asynccontextmanager
@@ -27,14 +33,30 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# Configure CORS properly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Add your frontend URLs
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+
+# Add explicit OPTIONS handlers for common API paths
+@app.options("/api/v1/services/generate-reply")
+async def options_generate_reply():
+    return JSONResponse(
+        content={"message": "CORS preflight accepted"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "86400",  # 24 hours
+        }
+    )
 
 # Global exception handler
 @app.exception_handler(HTTPException)

@@ -13,6 +13,7 @@
     "https://x.com/*",
     "https://twitter.com/*",
     "http://localhost:8000/*",
+    "http://localhost:8005/*",
     "https://api.humanreplies.com/*",
     "https://staging-api.humanreplies.com/*",
     "https://text.pollinations.ai/*",
@@ -64,8 +65,12 @@
   "options_page": "options.html",
   "web_accessible_resources": [
     {
-      "resources": ["auth-callback.html"],
-      "matches": ["https://anhcptguetscsoejzyed.supabase.co/*"]
+      "resources": [
+        "auth-callback.html"
+      ],
+      "matches": [
+        "https://anhcptguetscsoejzyed.supabase.co/*"
+      ]
     }
   ]
 }

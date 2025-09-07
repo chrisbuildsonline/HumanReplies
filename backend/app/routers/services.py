@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from app.models import ExternalServiceUrl, ServiceUrlsResponse, ExternalServiceUrlResponse, GenerateReplyRequest, GenerateReplyResponse
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, get_optional_user
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import httpx
@@ -178,12 +178,12 @@ async def refresh_service_url(
 @router.post("/generate-reply", response_model=GenerateReplyResponse)
 async def generate_reply(
     request: GenerateReplyRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Generate a reply using external AI service (proxied through our backend)"""
+    """Generate a prompt for AI reply generation (client will call pollinations directly)"""
     try:
-        # Get pollinations URL
+        # Ensure pollinations URL is available in database
         pollinations_service = await get_or_update_service_url(
             db, 
             "pollinations", 
@@ -196,59 +196,20 @@ async def generate_reply(
                 detail="AI service is currently unavailable"
             )
         
-        # Build prompt
+        # Build prompt but don't generate response (client will do that)
         prompt = build_prompt(request.context, {
             "tone": request.tone,
             "platform": request.platform,
-            "userWritingStyle": request.user_writing_style or ""
+            "length": request.length
         })
         
-        # Make request to pollinations
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            from urllib.parse import quote
-            encoded_prompt = quote(prompt, safe='')
-            url = f"{pollinations_service.url}/{encoded_prompt}"
-            
-            response = await client.get(url, headers={"Accept": "text/plain"})
-            
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"AI service returned error: {response.status_code}"
-                )
-            
-            reply = response.text.strip().strip('"').strip("'")
-            
-            # Store the reply for analytics (import the function from replies router)
-            from app.routers.replies import get_or_create_user
-            from app.models import Reply
-            import json
-            
-            user = await get_or_create_user(db, current_user)
-            
-            # Store reply
-            reply_record = Reply(
-                user_id=user.id,
-                original_post=request.context,
-                generated_reply=reply,
-                service_type=request.platform,
-                post_url=None,
-                reply_metadata=json.dumps({
-                    "tone": request.tone,
-                    "length": request.length,
-                    "service_used": "pollinations",
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-            )
-            
-            db.add(reply_record)
-            await db.commit()
-            
-            return GenerateReplyResponse(
-                reply=reply,
-                remaining_replies=None,  # Unlimited for now
-                is_limit_reached=False,
-                service_used="pollinations"
+        # Return just the prompt, let client handle the actual generation
+        return GenerateReplyResponse(
+            generated_prompt=prompt,
+            generated_response=None,  # Client will generate this
+            remaining_replies=None,  # Unlimited for now
+            is_limit_reached=False,
+            service_used="pollinations"
             )
         
     except HTTPException:
@@ -264,15 +225,22 @@ def build_prompt(context: str, options: Dict[str, Any]) -> str:
     """Build prompt for AI service - same logic as extension"""
     tone = options.get("tone", "helpful")
     platform = options.get("platform", "social media")
-    user_writing_style = options.get("userWritingStyle", "")
+    length = options.get("length", "medium")
     
     p = str(platform).lower()
     is_twitter = p == "twitter" or p == "x"
     
+    # Length-based character limits
+    length_instructions = {
+        "short": "Keep it very brief, under 50 characters.",
+        "medium": "Limit to under 100 characters." if is_twitter else "Keep it moderately concise, under 200 characters.",
+        "long": "You can be more detailed, up to 280 characters." if is_twitter else "Feel free to be more comprehensive, up to 500 characters."
+    }
+    
     platform_instructions = (
-        "Limit to under 100 characters. Keep it very light and short, do not sound to stiff. "
+        f"{length_instructions.get(length, length_instructions['medium'])} Keep it very light and short, do not sound to stiff. "
         "Avoid hashtags and unnecessary @mentions. Use newlines \\r\\n if suitable. "
-        if is_twitter else "Keep it concise and skimmable."
+        if is_twitter else f"{length_instructions.get(length, length_instructions['medium'])} Keep it concise and skimmable."
     )
     
     tone_instruction = "Write a helpful, balanced reply. "
@@ -298,10 +266,7 @@ def build_prompt(context: str, options: Dict[str, Any]) -> str:
         "Before returning, scan the text and replace any em/en dash with a comma or period."
     )
     
-    style = f"Adopt this writing style: {user_writing_style}" if user_writing_style else ""
-    
     prompt_parts = [
-        style,
         f"{tone_instruction} to this {('X (Twitter)' if is_twitter else p)} post: \"{context}\".",
         f"{platform_instructions} Keep it conversational and human-like.",
         "Be respectful. No emojis unless present in the original.",

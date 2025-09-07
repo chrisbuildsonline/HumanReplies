@@ -107,10 +107,10 @@ class GenerateReplyRequest(BaseModel):
     platform: str = Field(default="x", description="Social media platform")
     tone: str = Field(default="helpful", description="Tone of the reply")
     length: str = Field(default="medium", description="Length preference")
-    user_writing_style: Optional[str] = Field(None, description="User's writing style preferences")
 
 class GenerateReplyResponse(BaseModel):
-    reply: str
+    generated_prompt: str
+    generated_response: Optional[str] = None
     remaining_replies: Optional[int] = None
     is_limit_reached: bool = False
     service_used: str = "pollinations"

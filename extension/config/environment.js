@@ -7,14 +7,29 @@ class EnvironmentConfig {
       development: {
         apiBaseURL: "http://localhost:8000/api/v1",
         debug: true,
+        supabase: {
+          url: "https://anhcptguetscsoejzyed.supabase.co",
+          anonKey:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw",
+        },
       },
       staging: {
         apiBaseURL: "https://staging-api.humanreplies.com/v1",
         debug: true,
+        supabase: {
+          url: "https://anhcptguetscsoejzyed.supabase.co",
+          anonKey:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw",
+        },
       },
       production: {
         apiBaseURL: "https://api.humanreplies.com/v1",
         debug: false,
+        supabase: {
+          url: "https://anhcptguetscsoejzyed.supabase.co",
+          anonKey:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw",
+        },
       },
     };
 
@@ -119,6 +134,18 @@ class EnvironmentConfig {
     } catch (error) {
       return null;
     }
+  }
+
+  getSupabaseConfig() {
+    return this.getConfig().supabase;
+  }
+
+  getSupabaseUrl() {
+    return this.getSupabaseConfig().url;
+  }
+
+  getSupabaseAnonKey() {
+    return this.getSupabaseConfig().anonKey;
   }
 }
 

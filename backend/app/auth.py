@@ -1,4 +1,4 @@
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from typing import Optional, Dict, Any
@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import get_supabase_client
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 class AuthService:
     @staticmethod
@@ -57,8 +58,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     user = AuthService.get_user_from_token(token)
     return user
 
-async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[Dict[str, Any]]:
+async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)) -> Optional[Dict[str, Any]]:
     """Optional authentication - returns None if no token provided"""
     if not credentials:
         return None
-    return await get_current_user(credentials)
+    try:
+        token = credentials.credentials
+        payload = AuthService.verify_token(token)
+        user = AuthService.get_user_from_token(token)
+        return user
+    except HTTPException:
+        # If token validation fails, just return None instead of raising an error
+        return None

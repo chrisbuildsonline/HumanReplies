@@ -1,29 +1,33 @@
 // Background service worker for HumanReplies extension
 
 // Import the API service
-importScripts('core/api-service.js');
+importScripts("core/api-service.js");
 
 const apiService = new HumanRepliesAPI();
 
+// We'll handle CORS on the server side instead
+
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'generateReply') {
-    apiService.generateReply(request.context, request.options)
-      .then(result => {
+  if (request.action === "generateReply") {
+    apiService
+      .generateReply(request.context, request.options)
+      .then((result) => {
         sendResponse({ success: true, ...result });
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep message channel open for async response
   }
-  
-  if (request.action === 'checkLimits') {
-    apiService.checkUserLimits()
-      .then(limits => {
+
+  if (request.action === "checkLimits") {
+    apiService
+      .checkUserLimits()
+      .then((limits) => {
         sendResponse({ success: true, ...limits });
       })
-      .catch(error => {
+      .catch((error) => {
         sendResponse({ success: false, error: error.message });
       });
     return true;
@@ -32,27 +36,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Extension installation
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('HumanReplies extension installed');
-  
+  console.log("HumanReplies extension installed");
+
   // Set default settings
   chrome.storage.sync.set({
     dailyLimit: 20,
     usedReplies: 0,
-    lastResetDate: new Date().toDateString()
+    lastResetDate: new Date().toDateString(),
   });
 });
 
 // Reset daily counter at midnight
-chrome.alarms.create('resetDailyLimit', { 
+chrome.alarms.create("resetDailyLimit", {
   when: getNextMidnight(),
-  periodInMinutes: 24 * 60 
+  periodInMinutes: 24 * 60,
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'resetDailyLimit') {
+  if (alarm.name === "resetDailyLimit") {
     chrome.storage.sync.set({
       usedReplies: 0,
-      lastResetDate: new Date().toDateString()
+      lastResetDate: new Date().toDateString(),
     });
   }
 });

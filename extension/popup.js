@@ -79,22 +79,22 @@ class PopupManager {
       if (tabs[0]) {
         const url = new URL(tabs[0].url);
         const hostname = url.hostname.toLowerCase();
-        
+
         const supportedSites = [
           "x.com",
           "twitter.com",
           "linkedin.com",
           "facebook.com",
         ];
-        
+
         const statusElement = document.getElementById("statusText");
         const statusIndicator = document.getElementById("statusIndicator");
         const statusContainer = document.getElementById("extensionStatus");
-        
+
         const isSupported = supportedSites.some((site) =>
           hostname.includes(site)
         );
-        
+
         if (isSupported) {
           // Update status indicators to show active
           statusElement.textContent = "Extension Active";
@@ -120,7 +120,7 @@ class PopupManager {
 
   setupEventListeners() {
     // Login and logout buttons are handled via inline onclick handlers
-    
+
     // Dashboard button (add this to logged in state)
     this.addDashboardButton();
   }
