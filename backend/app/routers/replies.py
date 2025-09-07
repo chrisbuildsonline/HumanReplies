@@ -1,15 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
-from sqlalchemy.orm import selectinload
 from app.models import Reply, User, ReplyCreate, ReplyResponse, DashboardStats, RecentActivity
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, get_optional_user
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-import json
 
-router = APIRouter(prefix="/replies", tags=["Replies"])
+router = APIRouter(prefix="/replies", tags=["Replies - Privacy First Analytics"])
 
 async def get_or_create_user(db: AsyncSession, supabase_user: Dict[str, Any]) -> User:
     """Get existing user or create new one"""
@@ -34,24 +32,33 @@ async def get_or_create_user(db: AsyncSession, supabase_user: Dict[str, Any]) ->
     return user
 
 @router.post("/", response_model=ReplyResponse)
-async def create_reply(
+async def log_reply_usage(
     reply_data: ReplyCreate,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new reply"""
+    """Log reply usage for analytics - NO SENSITIVE DATA STORED
+    
+    Only logs:
+    - Timestamp of when reply was generated
+    - Service type (platform key like 'x', 'facebook', 'linkedin')  
+    - User ID (only if user is logged in)
+    
+    NO content, URLs, or other sensitive data is stored.
+    """
     try:
-        # Get or create user in local database
-        user = await get_or_create_user(db, current_user)
+        user_id = None
         
-        # Create reply
+        # Only get user ID if user is authenticated
+        if current_user:
+            user = await get_or_create_user(db, current_user)
+            user_id = user.id
+        
+        # Create minimal analytics record - NO SENSITIVE DATA
         reply = Reply(
-            user_id=user.id,
-            original_post=reply_data.original_post,
-            generated_reply=reply_data.generated_reply,
-            service_type=reply_data.service_type,
-            post_url=reply_data.post_url,
-            reply_metadata=json.dumps(reply_data.metadata) if reply_data.metadata else None
+            user_id=user_id,  # NULL if not logged in
+            service_type=reply_data.service_type  # Just the platform key
+            # NO original_post, generated_reply, post_url, or metadata stored!
         )
         
         db.add(reply)
@@ -60,35 +67,30 @@ async def create_reply(
         
         return ReplyResponse(
             id=str(reply.id),
-            user_id=str(reply.user_id),
-            original_post=reply.original_post,
-            generated_reply=reply.generated_reply,
+            user_id=str(reply.user_id) if reply.user_id else None,
             service_type=reply.service_type,
-            post_url=reply.post_url,
-            metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
-            created_at=reply.created_at,
-            updated_at=reply.updated_at
+            created_at=reply.created_at
         )
         
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create reply: {str(e)}"
+            detail=f"Failed to log reply usage: {str(e)}"
         )
 
 @router.get("/", response_model=List[ReplyResponse])
-async def get_user_replies(
+async def get_user_reply_analytics(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     service_type: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get user's replies with pagination and filtering"""
+    """Get user's reply analytics (timestamps and service types only)"""
     try:
         user = await get_or_create_user(db, current_user)
         
-        # Build query
+        # Build query - only return analytics data, no content
         query = select(Reply).where(Reply.user_id == user.id)
         
         if service_type:
@@ -103,13 +105,8 @@ async def get_user_replies(
             ReplyResponse(
                 id=str(reply.id),
                 user_id=str(reply.user_id),
-                original_post=reply.original_post,
-                generated_reply=reply.generated_reply,
                 service_type=reply.service_type,
-                post_url=reply.post_url,
-                metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
-                created_at=reply.created_at,
-                updated_at=reply.updated_at
+                created_at=reply.created_at
             )
             for reply in replies
         ]
@@ -117,7 +114,7 @@ async def get_user_replies(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch replies: {str(e)}"
+            detail=f"Failed to fetch reply analytics: {str(e)}"
         )
 
 @router.get("/stats", response_model=DashboardStats)
@@ -227,11 +224,11 @@ async def get_recent_activity(
     current_user: Dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get recent reply activity"""
+    """Get recent reply activity (analytics only - no sensitive data)"""
     try:
         user = await get_or_create_user(db, current_user)
         
-        # Get recent replies
+        # Get recent reply analytics
         result = await db.execute(
             select(Reply)
             .where(Reply.user_id == user.id)
@@ -250,13 +247,8 @@ async def get_recent_activity(
             ReplyResponse(
                 id=str(reply.id),
                 user_id=str(reply.user_id),
-                original_post=reply.original_post,
-                generated_reply=reply.generated_reply,
                 service_type=reply.service_type,
-                post_url=reply.post_url,
-                metadata=json.loads(reply.reply_metadata) if reply.reply_metadata else None,
-                created_at=reply.created_at,
-                updated_at=reply.updated_at
+                created_at=reply.created_at
             )
             for reply in replies
         ]
@@ -273,16 +265,16 @@ async def get_recent_activity(
         )
 
 @router.delete("/{reply_id}")
-async def delete_reply(
+async def delete_reply_analytics(
     reply_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a specific reply"""
+    """Delete a specific reply analytics record"""
     try:
         user = await get_or_create_user(db, current_user)
         
-        # Find and delete reply
+        # Find and delete reply analytics record
         result = await db.execute(
             select(Reply).where(
                 and_(Reply.id == reply_id, Reply.user_id == user.id)
@@ -293,18 +285,18 @@ async def delete_reply(
         if not reply:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Reply not found"
+                detail="Reply analytics record not found"
             )
         
         await db.delete(reply)
         await db.commit()
         
-        return {"message": "Reply deleted successfully"}
+        return {"message": "Reply analytics record deleted successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete reply: {str(e)}"
+            detail=f"Failed to delete reply analytics: {str(e)}"
         )

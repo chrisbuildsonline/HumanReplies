@@ -19,9 +19,13 @@ async def get_tones(
 ):
     """Get all active tones (presets + user's custom tones if authenticated)"""
     try:
-        # Base query for preset tones
+        # Base query for preset tones (excluding "ask" which is handled by frontend)
         query = select(Tone).where(
-            and_(Tone.is_active == True, Tone.is_preset == True)
+            and_(
+                Tone.is_active == True, 
+                Tone.is_preset == True,
+                Tone.name != "ask"  # Exclude "ask" tone - handled by frontend
+            )
         )
         
         # If user is authenticated, also include their custom tones
@@ -33,10 +37,11 @@ async def get_tones(
             user = user_result.scalar_one_or_none()
             
             if user:
-                # Include both preset tones and user's custom tones
+                # Include both preset tones and user's custom tones (excluding "ask")
                 query = select(Tone).where(
                     and_(
                         Tone.is_active == True,
+                        Tone.name != "ask",  # Exclude "ask" tone - handled by frontend
                         or_(
                             Tone.is_preset == True,
                             Tone.user_id == user.id
@@ -78,7 +83,11 @@ async def get_preset_tones(
     try:
         result = await db.execute(
             select(Tone)
-            .where(and_(Tone.is_active == True, Tone.is_preset == True))
+            .where(and_(
+                Tone.is_active == True, 
+                Tone.is_preset == True,
+                Tone.name != "ask"  # Exclude "ask" tone - handled by frontend
+            ))
             .order_by(Tone.sort_order, Tone.name)
         )
         tones = result.scalars().all()

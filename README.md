@@ -198,6 +198,7 @@ extension/
 
 ### Tone System
 
+- **"Always Ask Me" Setting**: Always appears first in dropdown (frontend-managed, not stored in database)
 - **Dynamic Loading**: Tones fetched from backend API on popup load
 - **Preset Tones**: System-defined tones with emojis and descriptions
   - 👍 Neutral - Balanced and helpful tone
@@ -265,13 +266,13 @@ extension/
 - `PUT /profile` - Update user profile
 - `DELETE /profile` - Deactivate user account
 
-#### Replies (`/api/v1/replies`)
+#### Replies (`/api/v1/replies`) - Privacy First Analytics
 
-- `POST /` - Create new reply record
-- `GET /` - Get user's replies (paginated, filterable)
-- `GET /stats` - Get dashboard statistics
-- `GET /recent` - Get recent reply activity
-- `DELETE /{reply_id}` - Delete specific reply
+- `POST /` - Log reply usage (timestamp, service type, user ID only - NO CONTENT STORED)
+- `GET /` - Get user's reply analytics (timestamps and service types only)
+- `GET /stats` - Get dashboard statistics (aggregated data only)
+- `GET /recent` - Get recent reply activity (analytics only - no sensitive data)
+- `DELETE /{reply_id}` - Delete specific reply analytics record
 
 #### External Services (`/api/v1/services`)
 
@@ -306,20 +307,26 @@ CREATE TABLE users (
 );
 ```
 
-#### Replies Table
+#### Replies Table - Privacy First Analytics Only
 
 ```sql
 CREATE TABLE replies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    original_post TEXT NOT NULL,
-    generated_reply TEXT NOT NULL,
-    service_type VARCHAR NOT NULL,
-    post_url VARCHAR,
-    metadata TEXT, -- JSON stored as text
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL if user not logged in
+    service_type VARCHAR NOT NULL, -- Platform key: "x", "facebook", "linkedin", etc.
+    created_at TIMESTAMP DEFAULT NOW() -- When the reply was generated
+    
+    -- NO SENSITIVE DATA STORED:
+    -- ❌ No original_post content
+    -- ❌ No generated_reply content  
+    -- ❌ No post_url or metadata
+    -- ❌ No updated_at (immutable analytics records)
 );
+
+-- Indexes for performance
+CREATE INDEX idx_replies_user_id ON replies(user_id);
+CREATE INDEX idx_replies_service_type ON replies(service_type);
+CREATE INDEX idx_replies_created_at ON replies(created_at);
 ```
 
 #### External Service URLs Table
@@ -633,27 +640,52 @@ npm run export  # Static files in out/
 
 ---
 
-## 🔐 Security
+## 🔐 Security & Privacy
 
-### Authentication
+### 🛡️ Privacy First Architecture
 
+**ZERO SENSITIVE DATA STORAGE** - We prioritize user privacy above all else:
+
+#### What We DON'T Store:
+- ❌ **Original post content** - Never stored in our database
+- ❌ **Generated reply content** - Never stored in our database  
+- ❌ **Post URLs** - No links to social media posts
+- ❌ **User conversations** - No chat history or message content
+- ❌ **Personal information** from posts - No names, locations, or sensitive data
+
+#### What We DO Store (Analytics Only):
+- ✅ **Timestamp** - When a reply was generated (for usage analytics)
+- ✅ **Service type** - Platform key only ("x", "facebook", "linkedin")
+- ✅ **User ID** - Only if user is logged in (for personalized analytics)
+
+#### Privacy Benefits:
+- **No Content Exposure**: Your posts and replies never leave your device
+- **Anonymous Usage**: Works without login - no tracking of anonymous users
+- **GDPR Compliant**: Minimal data collection with explicit consent
+- **Data Portability**: Users can export/delete all their analytics data
+- **Transparent**: All data collection is documented and visible
+
+### 🔒 Security
+
+#### Authentication
 - **Supabase JWT**: Secure token-based authentication
 - **Row-level Security**: Database-level access control
 - **API Validation**: Pydantic models validate all inputs
+- **Optional Auth**: Core functionality works without authentication
 
-### Data Protection
-
-- **User Isolation**: Users can only access their own data
+#### Data Protection
+- **User Isolation**: Users can only access their own analytics data
 - **SQL Injection**: SQLAlchemy ORM prevents injection attacks
 - **CORS**: Configured for specific frontend domains
 - **Input Sanitization**: All user inputs validated and sanitized
+- **Encrypted Storage**: All data encrypted at rest and in transit
 
-### Privacy
-
-- **Minimal Data**: Only necessary data is collected
-- **Local Storage**: Extension data stored locally
+#### Privacy Controls
+- **Minimal Data**: Only analytics data is collected (no content)
+- **Local Processing**: All content processing happens locally
 - **Opt-in Analytics**: Users control data collection
-- **Data Deletion**: Users can delete all their data
+- **Right to Deletion**: Users can delete all their data instantly
+- **Data Export**: Users can export their analytics data
 
 ---
 

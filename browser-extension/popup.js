@@ -1,28 +1,85 @@
 // Popup script for HumanReplies extension
-console.log("[Popup] script file loaded");
+addVisibleDebug("[Popup] script file loaded");
+addVisibleDebug("[Popup] Starting popup.js execution...");
+
+// Add visible debug info to the page
+function addVisibleDebug(message) {
+  try {
+    let debugDiv = document.getElementById("visibleDebug");
+    if (!debugDiv) {
+      debugDiv = document.createElement("div");
+      debugDiv.id = "visibleDebug";
+      debugDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background: #000;
+        color: #0f0;
+        font-family: monospace;
+        font-size: 10px;
+        padding: 5px;
+        z-index: 9999;
+        max-height: 100px;
+        overflow-y: auto;
+      `;
+      document.body.appendChild(debugDiv);
+    }
+    const time = new Date().toLocaleTimeString();
+    debugDiv.innerHTML += `[${time}] ${message}<br>`;
+    debugDiv.scrollTop = debugDiv.scrollHeight;
+  } catch (e) {
+    // Fallback to title
+    document.title = message;
+  }
+}
+
+addVisibleDebug("popup.js loaded");
+
 function appendDebug(message) {
   try {
     const box = document.getElementById("debugArea");
     if (!box) return;
     box.style.display = "block";
     const ts = new Date().toLocaleTimeString();
-    box.textContent += `[${ts}] ${message}\n`;
+    box.textContent += `[${ts}] ${message}
+`;
   } catch (e) {}
 }
 class PopupManager {
   constructor() {
+    addVisibleDebug("PopupManager constructor starting");
     this.isLoggedIn = false;
     this.currentUser = null;
     this.currentTone = "ask";
-    this.api = new HumanRepliesAPI();
-    this.supabase = new SupabaseClient();
-    this.authManager = new AuthManager();
 
+    try {
+      this.api = new HumanRepliesAPI();
+      addVisibleDebug("HumanRepliesAPI created");
+    } catch (e) {
+      addVisibleDebug("HumanRepliesAPI error: " + e.message);
+    }
+
+    try {
+      this.supabase = new SupabaseClient();
+      addVisibleDebug("SupabaseClient created");
+    } catch (e) {
+      addVisibleDebug("SupabaseClient error: " + e.message);
+    }
+
+    try {
+      this.authManager = new AuthManager();
+      addVisibleDebug("AuthManager created");
+    } catch (e) {
+      addVisibleDebug("AuthManager error: " + e.message);
+    }
+
+    addVisibleDebug("About to call init()");
     this.init();
   }
 
   async init() {
-    console.log("[Popup] init start");
+    addVisibleDebug("[Popup] init start");
 
     // First check for userState (new auth flow) - this takes priority
     await this.checkUserStateAuth();
@@ -33,14 +90,14 @@ class PopupManager {
       try {
         isAuthenticated = await this.authManager.checkAuthStatus();
       } catch (e) {
-        console.error("[Popup] authManager.checkAuthStatus threw", e);
+        addVisibleDebug("[Popup] authManager.checkAuthStatus threw", e);
       }
       const authState = this.authManager.getAuthState();
       this.isLoggedIn = authState.isLoggedIn;
       this.currentUser = authState.currentUser;
     }
 
-    console.log(
+    addVisibleDebug(
       "Auth check completed - isLoggedIn:",
       this.isLoggedIn,
       "currentUser:",
@@ -48,14 +105,22 @@ class PopupManager {
     ); // Debug logging
 
     this.checkCurrentSite();
-    await this.loadTones();
+
+    addVisibleDebug("[Popup] About to call loadTones()...");
+    try {
+      await this.loadTones();
+      addVisibleDebug("[Popup] loadTones() completed");
+    } catch (error) {
+      addVisibleDebug("[Popup] loadTones() failed:", error);
+    }
+
     this.updateUIState();
     this.loadToneSetting();
     this.setupEventListeners();
 
     // Set up periodic auth check using the auth manager
     this.authManager.startPeriodicCheck((isLoggedIn, currentUser) => {
-      console.log("Auth state changed:", isLoggedIn, currentUser);
+      addVisibleDebug("Auth state changed:", isLoggedIn, currentUser);
       this.isLoggedIn = isLoggedIn;
       this.currentUser = currentUser;
       this.updateUIState();
@@ -67,7 +132,7 @@ class PopupManager {
       }
     });
 
-    console.log("[Popup] init complete");
+    addVisibleDebug("[Popup] init complete");
 
     // Clean up when popup is closed
     window.addEventListener("beforeunload", () => {
@@ -78,37 +143,41 @@ class PopupManager {
   // Check userState (new auth flow) and validate tokens directly with Supabase
   async checkUserStateAuth() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(['userState'], async (result) => {
+      chrome.storage.local.get(["userState"], async (result) => {
         const userState = result.userState;
         if (!userState || !userState.access_token) {
-          console.log("[Popup] No userState found");
+          addVisibleDebug("[Popup] No userState found");
           return resolve(false);
         }
 
-        console.log("[Popup] Found userState, validating token...");
-        
+        addVisibleDebug("[Popup] Found userState, validating token...");
+
         // Check if token is expired (basic check)
         if (userState.expires_in && userState.storedAt) {
-          const expiryTime = userState.storedAt + (userState.expires_in * 1000);
+          const expiryTime = userState.storedAt + userState.expires_in * 1000;
           if (Date.now() >= expiryTime) {
-            console.log("[Popup] Token expired, clearing userState");
-            chrome.storage.local.remove(['userState']);
+            addVisibleDebug("[Popup] Token expired, clearing userState");
+            chrome.storage.local.remove(["userState"]);
             return resolve(false);
           }
         }
 
         // Validate token directly with Supabase (bypass our backend)
         try {
-          const userInfo = await this.supabase.getUserInfo(userState.access_token);
+          const userInfo = await this.supabase.getUserInfo(
+            userState.access_token
+          );
           if (userInfo && userInfo.email) {
-            console.log("[Popup] Token valid, setting logged in state");
-            
+            addVisibleDebug("[Popup] Token valid, setting logged in state");
+
             // Update state from validated userInfo
             this.isLoggedIn = true;
             this.currentUser = {
               id: userInfo.id,
               email: userInfo.email,
-              full_name: userInfo.user_metadata?.full_name || userInfo.email.split("@")[0],
+              full_name:
+                userInfo.user_metadata?.full_name ||
+                userInfo.email.split("@")[0],
               avatar_url: userInfo.user_metadata?.avatar_url,
               created_at: userInfo.created_at,
             };
@@ -121,15 +190,15 @@ class PopupManager {
               userProfile: this.currentUser,
             };
             await this.authManager.storeAuthData(authDataWithProfile);
-            
+
             resolve(true);
           } else {
             throw new Error("Invalid user info response");
           }
         } catch (error) {
-          console.log("[Popup] Token validation failed:", error.message);
+          addVisibleDebug("[Popup] Token validation failed:", error.message);
           // Clear invalid userState
-          chrome.storage.local.remove(['userState']);
+          chrome.storage.local.remove(["userState"]);
           resolve(false);
         }
       });
@@ -149,13 +218,13 @@ class PopupManager {
 
   // Manual refresh method for debugging
   async refreshAuthState() {
-    console.log("Manual auth refresh triggered using AuthManager");
+    addVisibleDebug("Manual auth refresh triggered using AuthManager");
 
     // Use auth manager to check status
     const isAuthenticated = await this.authManager.checkAuthStatus();
     const authState = this.authManager.getAuthState();
 
-    console.log("AuthManager check result:", isAuthenticated, authState);
+    addVisibleDebug("AuthManager check result:", isAuthenticated, authState);
 
     // Update local state
     this.isLoggedIn = authState.isLoggedIn;
@@ -165,12 +234,12 @@ class PopupManager {
 
     chrome.storage.local.get(null, (all) => {
       const userState = all.userState;
-      console.log(
+      addVisibleDebug(
         "[Debug refresh] chrome.storage.local keys:",
         Object.keys(all)
       );
       if (userState) {
-        console.log("[Debug refresh] userState:", userState);
+        addVisibleDebug("[Debug refresh] userState:", userState);
         const { userProfile, access_token } = userState;
         const shortToken = access_token
           ? access_token.substring(0, 6) + "…" + access_token.slice(-4)
@@ -178,11 +247,11 @@ class PopupManager {
         this.showSuccess(
           `userState: ${userProfile?.email || "n/a"} token ${shortToken}`
         );
-        
+
         // Force re-check userState auth on debug refresh
         this.checkUserStateAuth().then((isValid) => {
           if (isValid && !this.isLoggedIn) {
-            console.log("[Debug] userState was valid, updating UI");
+            addVisibleDebug("[Debug] userState was valid, updating UI");
             this.updateUIState();
           }
         });
@@ -208,7 +277,7 @@ class PopupManager {
       const authState = this.authManager.getAuthState();
       this.isLoggedIn = authState.isLoggedIn;
       this.currentUser = authState.currentUser;
-      console.log(
+      addVisibleDebug(
         "Popup.checkAuthStatus via AuthManager =>",
         this.isLoggedIn,
         this.currentUser
@@ -217,7 +286,7 @@ class PopupManager {
         this.updateUIState();
       }
     } catch (e) {
-      console.error("Delegated auth check failed", e);
+      addVisibleDebug("Delegated auth check failed", e);
     }
   }
 
@@ -282,12 +351,12 @@ class PopupManager {
 
     // Listen for storage changes to detect authentication updates
     chrome.storage.onChanged.addListener((changes, namespace) => {
-      console.log("Storage changed:", changes, namespace); // Debug logging
+      addVisibleDebug("Storage changed:", changes, namespace); // Debug logging
       if (
         namespace === "sync" &&
         (changes.userToken || changes.userProfile || changes.isAuthenticated)
       ) {
-        console.log(
+        addVisibleDebug(
           "Auth-related storage change detected (delegating to AuthManager)"
         );
         this.authManager.checkAuthStatus().then(() => {
@@ -309,7 +378,7 @@ class PopupManager {
           if (resp && resp.auth) {
             const bgTokenPresent = !!resp.auth.userToken;
             if (bgTokenPresent && !this.isLoggedIn) {
-              console.warn(
+              addVisibleDebug(
                 "[Popup] Background has token but popup state logged out. Forcing re-check."
               );
               this.checkAuthStatus();
@@ -338,12 +407,6 @@ class PopupManager {
       );
     }
 
-    // Add custom tone button
-    const addToneButton = document.getElementById("addToneButton");
-    if (addToneButton) {
-      addToneButton.addEventListener("click", () => this.showAddToneForm());
-    }
-
     // Debug refresh button
     const debugRefreshButton = document.getElementById("debugRefreshButton");
     if (debugRefreshButton) {
@@ -370,31 +433,31 @@ class PopupManager {
 
   async handleLogin() {
     try {
-      console.log("[Popup] handleLogin start");
+      addVisibleDebug("[Popup] handleLogin start");
       const loginBtn = document.getElementById("loginButton");
       if (loginBtn) {
         loginBtn.dataset.originalText = loginBtn.innerHTML;
         loginBtn.innerHTML = "🔄 Opening login...";
         loginBtn.disabled = true;
       } else {
-        console.warn("[Popup] loginButton not found in DOM");
+        addVisibleDebug("[Popup] loginButton not found in DOM");
       }
 
       // Use Supabase Auth popup (wrap to capture early failures)
       let authResult;
       try {
         authResult = await this.supabase.authenticateWithPopup("signin");
-        console.log("[Popup] authenticateWithPopup resolved");
+        addVisibleDebug("[Popup] authenticateWithPopup resolved");
       } catch (innerErr) {
-        console.error("[Popup] authenticateWithPopup error:", innerErr);
+        addVisibleDebug("[Popup] authenticateWithPopup error:", innerErr);
         throw innerErr;
       }
 
       // Handle successful authentication
       await this.handleAuthResult(authResult, "Login successful!");
-      console.log("[Popup] handleAuthResult completed");
+      addVisibleDebug("[Popup] handleAuthResult completed");
     } catch (error) {
-      console.error("Login failed:", error);
+      addVisibleDebug("Login failed:", error);
       if (error.message === "Authentication cancelled by user") {
         this.showError("Login cancelled");
       } else {
@@ -407,7 +470,7 @@ class PopupManager {
           loginBtn.dataset.originalText || "🚀 Login to HumanReplies";
         loginBtn.disabled = false;
       }
-      console.log("[Popup] handleLogin end");
+      addVisibleDebug("[Popup] handleLogin end");
     }
   }
 
@@ -540,10 +603,10 @@ class PopupManager {
 
   openDashboard() {
     // Get dashboard URL from environment config
-    const dashboardUrl = window.EnvironmentConfig 
-      ? window.EnvironmentConfig.getConfig().dashboardURL 
+    const dashboardUrl = window.EnvironmentConfig
+      ? window.EnvironmentConfig.getConfig().dashboardURL
       : "https://humanreplies.com/dashboard"; // fallback
-    
+
     chrome.tabs.create({ url: dashboardUrl });
     console.log("[Popup] Opening dashboard:", dashboardUrl);
   }
@@ -555,41 +618,91 @@ class PopupManager {
   }
 
   async loadTones() {
+    addVisibleDebug("[Popup] loadTones() starting...");
+
+    // First check if DOM elements exist
+    const toneSelectLoggedOut = document.getElementById(
+      "replyToneSelectLoggedOut"
+    );
+    const toneSelectLoggedIn = document.getElementById("replyToneSelect");
+
+    const domCheck = {
+      loggedOut: !!toneSelectLoggedOut,
+      loggedIn: !!toneSelectLoggedIn,
+      loggedOutValue: toneSelectLoggedOut ? toneSelectLoggedOut.value : "N/A",
+      loggedInValue: toneSelectLoggedIn ? toneSelectLoggedIn.value : "N/A",
+    };
+
+    addVisibleDebug("DOM check: " + JSON.stringify(domCheck));
+
+    if (!toneSelectLoggedOut && !toneSelectLoggedIn) {
+      addVisibleDebug("ERROR: No tone select elements found!");
+      return;
+    }
+
     try {
+      addVisibleDebug("Calling api.getTones()...");
       const tones = await this.api.getTones();
       this.allTones = tones; // Store for later use
 
-      // Debug: Log the tones to see their structure
-      console.log("LoadTones: All tones received:", tones);
-      
-      // Populate both tone select elements
+      addVisibleDebug("Got " + tones.length + " tones from API: " + JSON.stringify(tones));
+
+      // Re-get elements in case they changed
       const toneSelectLoggedOut = document.getElementById(
         "replyToneSelectLoggedOut"
       );
       const toneSelectLoggedIn = document.getElementById("replyToneSelect");
 
+      addVisibleDebug("[Popup] Found tone selects after API call:", {
+        loggedOut: !!toneSelectLoggedOut,
+        loggedIn: !!toneSelectLoggedIn,
+      });
+
       [toneSelectLoggedOut, toneSelectLoggedIn].forEach((toneSelect) => {
-        if (toneSelect && tones.length > 0) {
-          // Start fresh with just "Always ask me"
+        if (toneSelect) {
+          addVisibleDebug(`[Popup] Processing tone select: ${toneSelect.id}`);
+          // Always start with "Always ask me" as the first option
           toneSelect.innerHTML = '<option value="ask">Always ask me</option>';
 
-          // Filter out "Always ask me" from the API response to avoid duplicates
-          const filteredTones = tones.filter(tone => tone.name !== "ask");
+          // Add all tones from API (API already excludes "ask")
+          const filteredTones = tones;
 
           // Filter preset and custom tones from the filtered list
-          const presetTones = filteredTones.filter((tone) => 
-            tone.is_preset === true || 
-            // If is_preset is undefined/null, treat known preset tone names as presets
-            (tone.is_preset === undefined && ['neutral', 'joke', 'support', 'idea', 'question', 'confident'].includes(tone.name))
+          const presetTones = filteredTones.filter(
+            (tone) =>
+              tone.is_preset === true ||
+              // If is_preset is undefined/null, treat known preset tone names as presets
+              (tone.is_preset === undefined &&
+                [
+                  "neutral",
+                  "joke",
+                  "support",
+                  "idea",
+                  "question",
+                  "confident",
+                ].includes(tone.name))
           );
-          const customTones = filteredTones.filter((tone) => 
-            tone.is_preset === false || 
-            // If is_preset is undefined/null and it's not a known preset, treat as custom
-            (tone.is_preset === undefined && !['neutral', 'joke', 'support', 'idea', 'question', 'confident'].includes(tone.name))
+          const customTones = filteredTones.filter(
+            (tone) =>
+              tone.is_preset === false ||
+              // If is_preset is undefined/null and it's not a known preset, treat as custom
+              (tone.is_preset === undefined &&
+                ![
+                  "neutral",
+                  "joke",
+                  "support",
+                  "idea",
+                  "question",
+                  "confident",
+                ].includes(tone.name))
           );
-          
-          console.log(`LoadTones: Preset tones for ${toneSelect.id}:`, presetTones);
-          console.log(`LoadTones: Custom tones for ${toneSelect.id}:`, customTones);
+
+          addVisibleDebug(
+            `LoadTones: Preset tones for ${toneSelect.id}: ${presetTones.length} found`
+          );
+          addVisibleDebug(
+            `LoadTones: Custom tones for ${toneSelect.id}: ${customTones.length} found`
+          );
 
           // For logged-in users (replyToneSelect), show custom tones first, then presets
           if (this.isLoggedIn && toneSelect.id === "replyToneSelect") {
@@ -622,7 +735,7 @@ class PopupManager {
                 toneSelect.appendChild(option);
               });
             }
-          } 
+          }
           // For logged-out users (replyToneSelectLoggedOut), show only preset tones
           else if (toneSelect.id === "replyToneSelectLoggedOut") {
             if (presetTones.length > 0) {
@@ -639,10 +752,19 @@ class PopupManager {
               });
             }
           }
+
+          addVisibleDebug(
+            `[Popup] Finished populating ${toneSelect.id}, options count: ${toneSelect.options.length}`
+          );
+        } else {
+          addVisibleDebug(`[Popup] Tone select element not found in DOM`);
         }
       });
+
+      addVisibleDebug("[Popup] loadTones() completed successfully");
     } catch (error) {
-      console.error("Failed to load tones:", error);
+      addVisibleDebug("Failed to load tones:", error);
+      addVisibleDebug("Error stack:", error.stack);
       // Keep the existing "Always ask me" option as fallback
     }
   }
@@ -684,35 +806,6 @@ class PopupManager {
     `
       )
       .join("");
-  }
-
-  showAddToneForm() {
-    const customTonesList = document.getElementById("customTonesList");
-    if (!customTonesList) return;
-
-    const formHtml = `
-      <div class="tone-form" id="addToneForm">
-        <div class="tone-form-field">
-          <label class="tone-form-label">Tone Name (lowercase, no spaces)</label>
-          <input type="text" class="tone-form-input" id="toneNameInput" placeholder="e.g., friendly_casual">
-        </div>
-        <div class="tone-form-field">
-          <label class="tone-form-label">Display Name</label>
-          <input type="text" class="tone-form-input" id="toneDisplayInput" placeholder="e.g., 😊 Friendly & Casual">
-        </div>
-        <div class="tone-form-field">
-          <label class="tone-form-label">Description (optional)</label>
-          <textarea class="tone-form-textarea" id="toneDescInput" placeholder="Describe this tone..."></textarea>
-        </div>
-        <div class="tone-form-actions">
-          <button class="tone-form-btn save" onclick="saveCustomTone()">Save</button>
-          <button class="tone-form-btn cancel" onclick="cancelToneForm()">Cancel</button>
-        </div>
-      </div>
-    `;
-
-    customTonesList.insertAdjacentHTML("afterbegin", formHtml);
-    document.getElementById("addToneButton").style.display = "none";
   }
 
   async saveCustomTone(isEdit = false, toneId = null) {
@@ -1061,15 +1154,44 @@ window.checkStorageNow = async function () {
 
 // Initialize when DOM is ready
 document.addEventListener("DOMContentLoaded", function () {
+  addVisibleDebug("DOMContentLoaded fired");
   console.log("[Popup] DOMContentLoaded fired");
+  console.log("[Popup] DOM is ready, initializing...");
+
+  // Check if required dependencies are loaded
+  const deps = {
+    HumanRepliesAPI: typeof HumanRepliesAPI,
+    SupabaseClient: typeof SupabaseClient,
+    AuthManager: typeof AuthManager,
+    EnvironmentConfig: typeof window.EnvironmentConfig,
+  };
+
+  addVisibleDebug("Dependencies: " + JSON.stringify(deps));
+  console.log("[Popup] Checking dependencies:", deps);
+
   appendDebug("DOMContentLoaded");
   try {
+    addVisibleDebug("Creating PopupManager...");
+    console.log("[Popup] Creating PopupManager...");
     window.popupManager = new PopupManager();
+
+    addVisibleDebug("PopupManager created successfully");
+    console.log("[Popup] PopupManager created successfully");
     appendDebug("PopupManager constructed");
   } catch (e) {
+    addVisibleDebug("PopupManager error: " + e.message);
     console.error("[Popup] Failed constructing PopupManager", e);
+    console.error("[Popup] Error stack:", e.stack);
     appendDebug("PopupManager construction failed: " + (e && e.message));
   }
+
+  // Basic DOM test
+  const loggedOutSelect = document.getElementById("replyToneSelectLoggedOut");
+  const loggedInSelect = document.getElementById("replyToneSelect");
+  console.log("[Popup] DOM elements found:", {
+    loggedOut: !!loggedOutSelect,
+    loggedIn: !!loggedInSelect,
+  });
 
   // Delegated fallback
   document.body.addEventListener(
@@ -1096,4 +1218,14 @@ document.addEventListener("DOMContentLoaded", function () {
     },
     true
   );
+});
+
+// Also log when the script is fully parsed
+console.log("[Popup] Script parsing completed");
+
+// Test if chrome APIs are available
+console.log("[Popup] Chrome APIs available:", {
+  chrome: typeof chrome,
+  storage: typeof chrome?.storage,
+  runtime: typeof chrome?.runtime,
 });

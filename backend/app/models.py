@@ -58,35 +58,26 @@ class AuthResponse(BaseResponse):
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
 
-# Reply Models
+# Reply Models - Privacy-First Analytics Only
 class ReplyCreate(BaseModel):
-    original_post: str = Field(..., description="Original post content")
-    generated_reply: str = Field(..., description="AI generated reply")
-    service_type: str = Field(..., description="Social media platform")
-    post_url: Optional[str] = Field(None, description="URL of the original post")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    service_type: str = Field(..., description="Social media platform key (e.g., 'x', 'facebook', 'linkedin')")
 
 class ReplyResponse(BaseModel):
     id: str
-    user_id: str
-    original_post: str
-    generated_reply: str
+    user_id: Optional[str] = None  # Only included if user was logged in
     service_type: str
-    post_url: Optional[str]
-    metadata: Optional[Dict[str, Any]]
     created_at: datetime
-    updated_at: Optional[datetime]
 
 class DashboardStats(BaseModel):
     total_replies: int
     today_replies: int
     week_replies: int
     month_replies: int
-    daily_activity: List[Dict[str, Any]]
-    top_services: List[Dict[str, Any]]
+    daily_activity: List[Dict[str, Any]]  # [{"date": "2025-01-01", "count": 5}]
+    top_services: List[Dict[str, Any]]    # [{"service": "x", "count": 10, "percentage": 50.0}]
 
 class RecentActivity(BaseModel):
-    replies: List[ReplyResponse]
+    replies: List[ReplyResponse]  # Only contains: id, service_type, created_at (no sensitive data)
     total_count: int
 
 # External Service URL Models
@@ -155,14 +146,9 @@ class Reply(Base):
     __tablename__ = "replies"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    original_post = Column(Text, nullable=False)
-    generated_reply = Column(Text, nullable=False)
-    service_type = Column(String, nullable=False, index=True)
-    post_url = Column(String, nullable=True)
-    reply_metadata = Column(Text, nullable=True)  # JSON stored as text
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)  # NULL if user not logged in
+    service_type = Column(String, nullable=False, index=True)  # e.g., "x", "facebook", "linkedin"
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="replies")

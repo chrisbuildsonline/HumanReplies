@@ -18,12 +18,6 @@ from app.models import Tone
 # Default tones to insert
 DEFAULT_TONES = [
     {
-        "name": "ask",
-        "display_name": "Always ask me",
-        "description": "Always prompt for tone selection",
-        "sort_order": 0
-    },
-    {
         "name": "neutral",
         "display_name": "👍 Neutral",
         "description": "Balanced and helpful tone",

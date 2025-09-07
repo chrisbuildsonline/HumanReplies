@@ -112,7 +112,7 @@ class HumanRepliesAPI {
           // Make direct request to pollinations with the generated prompt
           const encodedPrompt = encodeURIComponent(data.generated_prompt);
           const pollinationsResponse = await fetch(
-            `${pollinationsUrl}/${encodedPrompt}?seed=${Mapath.random()
+            `${pollinationsUrl}/${encodedPrompt}?seed=${Math.random()
               .toString(36)
               .substring(2, 10)}`,
             {
@@ -213,38 +213,100 @@ class HumanRepliesAPI {
         }
         resolve(token || null);
       };
+
+      // Check if chrome.storage is available
+      if (typeof chrome === "undefined" || !chrome.storage) {
+        console.warn("[API] chrome.storage not available");
+        return finish(null, "no-chrome-storage");
+      }
+
       try {
-        chrome.storage.sync.get(["userToken"], (result) => {
-          if (result && result.userToken) {
-            return finish(result.userToken, "sync");
+        // First check for new userState format (priority)
+        chrome.storage.local.get(["userState"], (userStateResult) => {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "[API] getUserToken userState error:",
+              chrome.runtime.lastError
+            );
+            tryLegacyFormats();
+            return;
           }
+
+          if (userStateResult && userStateResult.userState && userStateResult.userState.access_token) {
+            return finish(userStateResult.userState.access_token, "userState");
+          }
+          tryLegacyFormats();
+        });
+      } catch (e) {
+        console.warn("[API] getUserToken userState failed, trying legacy", e);
+        tryLegacyFormats();
+      }
+
+      function tryLegacyFormats() {
+        // Try sync storage with legacy userToken format
+        try {
+          chrome.storage.sync.get(["userToken"], (result) => {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "[API] getUserToken sync error:",
+                chrome.runtime.lastError
+              );
+              tryLocalStorage();
+              return;
+            }
+
+            if (result && result.userToken) {
+              return finish(result.userToken, "sync");
+            }
+            tryLocalStorage();
+          });
+        } catch (e) {
+          console.warn("[API] getUserToken sync failed, trying local", e);
+          tryLocalStorage();
+        }
+      }
+
+      function tryLocalStorage() {
+        try {
           chrome.storage.local.get(["userToken"], (localResult) => {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "[API] getUserToken local error:",
+                chrome.runtime.lastError
+              );
+              tryBackgroundFallback();
+              return;
+            }
+
             if (localResult && localResult.userToken) {
               return finish(localResult.userToken, "local");
             }
-            // Background cache fallback
-            try {
-              chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
-                const bgToken = resp?.auth?.userToken;
-                finish(bgToken, "background");
-              });
-            } catch (err) {
-              finish(null, "none");
-            }
-          });
-        });
-      } catch (e) {
-        console.warn("[API] getUserToken sync failed, trying local", e);
-        try {
-          chrome.storage.local.get(["userToken"], (localResult) => {
-            if (localResult && localResult.userToken) {
-              return finish(localResult.userToken, "local-ex");
-            }
-            finish(null, "ex-no-token");
+            tryBackgroundFallback();
           });
         } catch (err) {
           console.error("[API] getUserToken local failure", err);
-          finish(null, "fatal");
+          tryBackgroundFallback();
+        }
+      }
+
+      function tryBackgroundFallback() {
+        // Background cache fallback
+        try {
+          chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "[API] getUserToken background error:",
+                chrome.runtime.lastError
+              );
+              finish(null, "background-error");
+              return;
+            }
+            const bgToken = resp?.auth?.userToken;
+            finish(bgToken, "background");
+          });
+        } catch (err) {
+          console.error("[API] getUserToken background failure", err);
+          finish(null, "none");
         }
       }
     });
@@ -306,15 +368,16 @@ class HumanRepliesAPI {
     try {
       // Ensure config is loaded
       if (!this.baseURL) {
+        console.log("[API] getTones: baseURL not set, initializing config...");
         await this.initializeConfig();
       }
 
-      if (this.debugMode) {
-        console.log(`Fetching tones from: ${this.baseURL}/tones`);
-      }
+      console.log(`[API] getTones: Fetching tones from: ${this.baseURL}/tones/`);
 
       // Get the token if available
       const userToken = await this.getUserToken();
+      console.log("[API] getTones: Got user token:", userToken ? "YES" : "NO");
+      
       const headers = {
         "Content-Type": "application/json",
       };
@@ -322,30 +385,41 @@ class HumanRepliesAPI {
       // Add authorization header if we have a token
       if (userToken) {
         headers.Authorization = `Bearer ${userToken}`;
+        console.log("[API] getTones: Added Authorization header");
       }
 
+      console.log("[API] getTones: Making fetch request...");
       const response = await fetch(`${this.baseURL}/tones/`, {
         method: "GET",
         headers: headers,
       });
+
+      console.log("[API] getTones: Response status:", response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch tones: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("[API] getTones: Response data:", data);
 
       if (this.debugMode) {
         console.log("Tones fetched:", data);
       }
 
-      return data.tones || [];
+      const tones = data.tones || [];
+      console.log("[API] getTones: Returning", tones.length, "tones");
+      return tones;
     } catch (error) {
-      console.error("Failed to fetch tones:", error);
+      console.error("[API] getTones: Failed to fetch tones:", error);
+      console.error("[API] getTones: Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
 
-      // Return fallback tones if API fails
-      return [
-        { name: "ask", display_name: "Always ask me" },
+      // Return fallback tones if API fails (excluding "ask" - handled by frontend)
+      const fallbackTones = [
         { name: "neutral", display_name: "👍 Neutral" },
         { name: "joke", display_name: "😂 Joke" },
         { name: "support", display_name: "❤️ Support" },
@@ -353,6 +427,8 @@ class HumanRepliesAPI {
         { name: "question", display_name: "❓ Question" },
         { name: "confident", display_name: "💪 Confident" },
       ];
+      console.log("[API] getTones: Using fallback tones:", fallbackTones.length);
+      return fallbackTones;
     }
   }
 

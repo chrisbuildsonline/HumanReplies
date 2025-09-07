@@ -21,7 +21,8 @@ class XIntegration {
     setTimeout(() => {
       button.innerHTML = "";
     }, 1500);
-    if (message) alert("HumanReplies error: " + message);
+    if (message)
+      alert("HumanReplies  seems to be offline, please try again later.");
   }
 
   clearTextareaContent(textarea) {
@@ -55,7 +56,8 @@ class XIntegration {
       button.innerHTML = "";
     }, 1500);
     // Optionally show alert
-    if (message) alert("HumanReplies error: " + message);
+    if (message)
+      alert("HumanReplies  seems to be offline, please try again later.");
   }
 
   clearTextareaContent(textarea) {
@@ -119,13 +121,16 @@ class XIntegration {
     this.apiService = new HumanRepliesAPI();
     this.debugMode = true; // Enable debugging
     this.addedButtons = new Set(); // Track added buttons to prevent duplicates
+    this.availableTones = null; // Cache for available tones
     console.log("🧠 HumanReplies: X Integration initialized");
+    this.setupMessageListener();
     this.init();
   }
 
-  init() {
+  async init() {
     this.log("Starting initialization...");
     this.detectTheme();
+    await this.loadAvailableTones();
     this.injectReplyButtons();
     this.observePageChanges();
     // Removed call to undefined this.initTextSelectionToolbar();
@@ -174,6 +179,104 @@ class XIntegration {
   log(message) {
     if (this.debugMode) {
       console.log(`🧠 HumanReplies: ${message}`);
+    }
+  }
+
+  setupMessageListener() {
+    // Listen for messages from popup to refresh tones
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === "refreshTones") {
+        this.log("Received refresh tones request from popup");
+        this.refreshTones()
+          .then(() => {
+            this.log("Tones refreshed successfully");
+            sendResponse({ success: true });
+          })
+          .catch((error) => {
+            this.log(`Failed to refresh tones: ${error.message}`);
+            sendResponse({ success: false, error: error.message });
+          });
+        return true; // Keep message channel open for async response
+      }
+    });
+  }
+
+  async loadAvailableTones() {
+    this.log("Loading available tones...");
+
+    try {
+      // Ensure API service is properly initialized
+      if (!this.apiService.baseURL) {
+        this.log("API service not initialized, initializing now...");
+        await this.apiService.initializeConfig();
+      }
+
+      // First try to get from localStorage cache
+      const cachedTones = localStorage.getItem("humanreplies_tones");
+      const cacheTimestamp = localStorage.getItem(
+        "humanreplies_tones_timestamp"
+      );
+      const cacheAge = Date.now() - (parseInt(cacheTimestamp) || 0);
+
+      // Use cache if it's less than 5 minutes old
+      if (cachedTones && cacheAge < 5 * 60 * 1000) {
+        this.availableTones = JSON.parse(cachedTones);
+        this.log(`Loaded ${this.availableTones.length} tones from cache`);
+        return;
+      }
+
+      // Fetch fresh tones from API
+      this.log("Fetching tones from API...");
+      this.log(`API Base URL: ${this.apiService.baseURL}`);
+      const tones = await this.apiService.getTones();
+      this.availableTones = tones;
+
+      // Cache the tones
+      localStorage.setItem("humanreplies_tones", JSON.stringify(tones));
+      localStorage.setItem(
+        "humanreplies_tones_timestamp",
+        Date.now().toString()
+      );
+
+      this.log(`Loaded ${tones.length} tones from API and cached them`);
+    } catch (error) {
+      this.log(`Failed to load tones: ${error.message}`);
+      console.error("Tone loading error:", error);
+
+      // Use fallback tones if API fails
+      this.availableTones = [
+        { name: "neutral", display_name: "👍 Neutral", is_preset: true },
+        { name: "joke", display_name: "😂 Joke", is_preset: true },
+        { name: "support", display_name: "❤️ Support", is_preset: true },
+        { name: "idea", display_name: "💡 Idea", is_preset: true },
+        { name: "question", display_name: "❓ Question", is_preset: true },
+        { name: "confident", display_name: "💪 Confident", is_preset: true },
+      ];
+      this.log(`Using fallback tones: ${this.availableTones.length} tones`);
+    }
+  }
+
+  async refreshTones() {
+    this.log("Refreshing tones from API...");
+
+    try {
+      // Clear cache and fetch fresh tones
+      localStorage.removeItem("humanreplies_tones");
+      localStorage.removeItem("humanreplies_tones_timestamp");
+
+      const tones = await this.apiService.getTones();
+      this.availableTones = tones;
+
+      // Update cache
+      localStorage.setItem("humanreplies_tones", JSON.stringify(tones));
+      localStorage.setItem(
+        "humanreplies_tones_timestamp",
+        Date.now().toString()
+      );
+
+      this.log(`Refreshed ${tones.length} tones from API`);
+    } catch (error) {
+      this.log(`Failed to refresh tones: ${error.message}`);
     }
   }
 
@@ -678,11 +781,31 @@ class XIntegration {
     try {
       this.log("Calling API service...");
 
-      // Send context directly to generateReply (buildPrompt is now handled by backend)
-      const result = await this.apiService.generateReply(tweetContext, {
-        platform: "x",
-        tone: selectedTone || "helpful",
+      // Add timeout to catch hanging calls
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+          () => reject(new Error("API call timeout after 30 seconds")),
+          30000
+        );
       });
+
+      // Send context directly to generateReply (buildPrompt is now handled by backend)
+      this.log(
+        `Calling generateReply with context: "${tweetContext.substring(
+          0,
+          100
+        )}..." and tone: ${selectedTone || "helpful"}`
+      );
+
+      const result = await Promise.race([
+        this.apiService.generateReply(tweetContext, {
+          platform: "x",
+          tone: selectedTone || "helpful",
+        }),
+        timeoutPromise,
+      ]);
+
+      this.log("API service call completed successfully");
 
       // Enforce 280 character limit
       const processedReply = this.enforceCharacterLimit(result.reply, 280);
@@ -1636,59 +1759,170 @@ class XIntegration {
     menu.appendChild(header);
     this.log("Header added to menu");
 
-    // Tone options
-    const toneOptions = [
-      { icon: "👍", text: "Neutral", value: "neutral" },
-      { icon: "😂", text: "Joke", value: "joke" },
-      { icon: "❤️", text: "Support", value: "support" },
-      { icon: "💡", text: "Idea", value: "idea" },
-      { icon: "❓", text: "Question", value: "question" },
-    ];
+    // Get tone options from loaded tones or fallback
+    let toneOptions = [];
 
-    toneOptions.forEach((option) => {
-      const toneButton = document.createElement("button");
-      toneButton.style.cssText = `
-        display: flex;
-        align-items: center;
-        width: 100%;
-        padding: 10px 12px;
-        border: none;
-        background: transparent;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        color: #2c3e50;
-        transition: background 0.2s ease;
-        margin-bottom: 2px;
-        text-align: left;
+    if (this.availableTones && this.availableTones.length > 0) {
+      // Separate preset and custom tones
+      const presetTones = this.availableTones.filter(
+        (tone) => tone.is_preset !== false
+      );
+      const customTones = this.availableTones.filter(
+        (tone) => tone.is_preset === false
+      );
+
+      // Add custom tones first (if any)
+      customTones.forEach((tone) => {
+        toneOptions.push({
+          icon: "🎨", // Custom tone icon
+          text: tone.display_name,
+          value: tone.name,
+          isCustom: true,
+        });
+      });
+
+      // Add preset tones
+      presetTones.forEach((tone) => {
+        // Extract emoji from display_name or use default
+        const match = tone.display_name.match(/^(\p{Emoji})\s*/u);
+        const icon = match ? match[1] : "💬";
+        const text = tone.display_name.replace(/^(\p{Emoji})\s*/u, "");
+
+        toneOptions.push({
+          icon: icon,
+          text: text,
+          value: tone.name,
+          isCustom: false,
+        });
+      });
+    } else {
+      // Fallback tone options if no tones loaded
+      toneOptions = [
+        { icon: "👍", text: "Neutral", value: "neutral", isCustom: false },
+        { icon: "😂", text: "Joke", value: "joke", isCustom: false },
+        { icon: "❤️", text: "Support", value: "support", isCustom: false },
+        { icon: "💡", text: "Idea", value: "idea", isCustom: false },
+        { icon: "❓", text: "Question", value: "question", isCustom: false },
+      ];
+    }
+
+    // Add custom tones section if any exist
+    const customTones = toneOptions.filter((option) => option.isCustom);
+    const presetTones = toneOptions.filter((option) => !option.isCustom);
+
+    if (customTones.length > 0) {
+      // Custom tones header
+      const customHeader = document.createElement("div");
+      customHeader.style.cssText = `
+        font-size: 11px;
+        font-weight: 600;
+        color: #8b5cf6;
+        margin: 8px 0 4px 0;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       `;
+      customHeader.textContent = "Your Custom Tones";
+      menu.appendChild(customHeader);
 
-      toneButton.innerHTML = `
-        <span style="margin-right: 12px; font-size: 16px;">${option.icon}</span>
-        <span>${option.text}</span>
-      `;
-
-      toneButton.addEventListener("mouseenter", () => {
-        toneButton.style.background = "#f5f3f0";
+      // Add custom tone buttons
+      customTones.forEach((option) => {
+        const toneButton = this.createToneButton(
+          option,
+          button,
+          textarea,
+          menu
+        );
+        toneButton.style.borderLeft = "3px solid #8b5cf6";
+        menu.appendChild(toneButton);
+        this.log(`Added custom tone button: ${option.text}`);
       });
 
-      toneButton.addEventListener("mouseleave", () => {
-        toneButton.style.background = "transparent";
-      });
+      // Separator between custom and preset tones
+      if (presetTones.length > 0) {
+        const separator = document.createElement("div");
+        separator.style.cssText = `
+          height: 1px;
+          background: #f0f0f0;
+          margin: 8px 0;
+        `;
+        menu.appendChild(separator);
 
-      toneButton.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.log(`Reply tone selected: ${option.value}`);
-        this.handleReplyGeneration(button, textarea, option.value);
-        menu.remove();
-      });
+        // Preset tones header
+        const presetHeader = document.createElement("div");
+        presetHeader.style.cssText = `
+          font-size: 11px;
+          font-weight: 600;
+          color: #7f8c8d;
+          margin: 4px 0;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        `;
+        presetHeader.textContent = "Preset Tones";
+        menu.appendChild(presetHeader);
+      }
+    }
 
+    // Add preset tone buttons
+    presetTones.forEach((option) => {
+      const toneButton = this.createToneButton(option, button, textarea, menu);
       menu.appendChild(toneButton);
-      this.log(`Added tone button: ${option.text}`);
+      this.log(`Added preset tone button: ${option.text}`);
     });
     this.log(`Total tone buttons created: ${toneOptions.length}`);
+  }
+
+  createToneButton(option, button, textarea, menu) {
+    const toneButton = document.createElement("button");
+    const hoverColor = this.isDarkMode ? "#1e2732" : "#f5f3f0";
+
+    toneButton.style.cssText = `
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: ${this.isDarkMode ? "white" : "#2c3e50"};
+      transition: all 0.2s ease;
+      margin-bottom: 2px;
+      text-align: left;
+    `;
+
+    toneButton.innerHTML = `
+      <span style="margin-right: 12px; font-size: 16px;">${option.icon}</span>
+      <span>${option.text}</span>
+      ${
+        option.isCustom
+          ? '<span style="margin-left: auto; font-size: 10px; color: #8b5cf6; font-weight: 600;">CUSTOM</span>'
+          : ""
+      }
+    `;
+
+    toneButton.addEventListener("mouseenter", () => {
+      toneButton.style.background = hoverColor;
+      if (option.isCustom) {
+        toneButton.style.transform = "translateX(2px)";
+      }
+    });
+
+    toneButton.addEventListener("mouseleave", () => {
+      toneButton.style.background = "transparent";
+      toneButton.style.transform = "translateX(0)";
+    });
+
+    toneButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.log(`Reply tone selected: ${option.value}`);
+      this.handleReplyGeneration(button, textarea, option.value);
+      menu.remove();
+    });
+
+    return toneButton;
 
     // Separator
     const separator = document.createElement("div");
@@ -1740,14 +1974,41 @@ class XIntegration {
       cursor: pointer;
     `;
 
-    const rememberOptions = [
-      { value: "ask", text: "Always ask" },
-      { value: "neutral", text: "👍 Neutral" },
-      { value: "joke", text: "😂 Joke" },
-      { value: "support", text: "❤️ Support" },
-      { value: "idea", text: "💡 Idea" },
-      { value: "question", text: "❓ Question" },
-    ];
+    // Build remember options from available tones
+    const rememberOptions = [{ value: "ask", text: "Always ask" }];
+
+    if (this.availableTones && this.availableTones.length > 0) {
+      // Add custom tones first
+      const customTones = this.availableTones.filter(
+        (tone) => tone.is_preset === false
+      );
+      customTones.forEach((tone) => {
+        rememberOptions.push({
+          value: tone.name,
+          text: `🎨 ${tone.display_name}`,
+        });
+      });
+
+      // Add preset tones
+      const presetTones = this.availableTones.filter(
+        (tone) => tone.is_preset !== false
+      );
+      presetTones.forEach((tone) => {
+        rememberOptions.push({
+          value: tone.name,
+          text: tone.display_name,
+        });
+      });
+    } else {
+      // Fallback options
+      rememberOptions.push(
+        { value: "neutral", text: "👍 Neutral" },
+        { value: "joke", text: "😂 Joke" },
+        { value: "support", text: "❤️ Support" },
+        { value: "idea", text: "💡 Idea" },
+        { value: "question", text: "❓ Question" }
+      );
+    }
 
     rememberOptions.forEach((option) => {
       const optionElement = document.createElement("option");
@@ -1834,9 +2095,52 @@ class XIntegration {
   async getSavedReplyTone() {
     try {
       return new Promise((resolve) => {
-        chrome.storage.sync.get(["replyTone"], (result) => {
-          resolve(result.replyTone || "ask");
-        });
+        // Check if chrome.storage is available
+        if (typeof chrome === "undefined" || !chrome.storage) {
+          console.warn("[XIntegration] chrome.storage not available");
+          resolve("ask");
+          return;
+        }
+
+        const trySync = () => {
+          try {
+            chrome.storage.sync.get(["replyTone"], (result) => {
+              if (chrome.runtime.lastError) {
+                console.warn(
+                  "[XIntegration] getSavedReplyTone sync error:",
+                  chrome.runtime.lastError
+                );
+                tryLocal();
+                return;
+              }
+              resolve(result.replyTone || "ask");
+            });
+          } catch (e) {
+            console.warn("[XIntegration] getSavedReplyTone sync failed:", e);
+            tryLocal();
+          }
+        };
+
+        const tryLocal = () => {
+          try {
+            chrome.storage.local.get(["replyTone"], (result) => {
+              if (chrome.runtime.lastError) {
+                console.warn(
+                  "[XIntegration] getSavedReplyTone local error:",
+                  chrome.runtime.lastError
+                );
+                resolve("ask");
+                return;
+              }
+              resolve(result.replyTone || "ask");
+            });
+          } catch (e) {
+            console.warn("[XIntegration] getSavedReplyTone local failed:", e);
+            resolve("ask");
+          }
+        };
+
+        trySync();
       });
     } catch (error) {
       this.log(`Error getting saved tone: ${error.message}`);
@@ -1846,10 +2150,48 @@ class XIntegration {
 
   saveReplyTone(tone) {
     try {
-      chrome.storage.sync.set({ replyTone: tone });
-      this.log(`Saved reply tone: ${tone}`);
+      // Check if chrome.storage is available
+      if (typeof chrome === "undefined" || !chrome.storage) {
+        console.warn("[XIntegration] chrome.storage not available for saving");
+        return;
+      }
+
+      chrome.storage.sync.set({ replyTone: tone }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            "[XIntegration] saveReplyTone sync error:",
+            chrome.runtime.lastError
+          );
+          // Fallback to local storage
+          chrome.storage.local.set({ replyTone: tone }, () => {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "[XIntegration] saveReplyTone local error:",
+                chrome.runtime.lastError
+              );
+            } else {
+              this.log(`Saved reply tone to local storage: ${tone}`);
+            }
+          });
+        } else {
+          this.log(`Saved reply tone to sync storage: ${tone}`);
+        }
+      });
     } catch (error) {
       this.log(`Error saving tone: ${error.message}`);
+      // Try local storage as fallback
+      try {
+        if (
+          typeof chrome !== "undefined" &&
+          chrome.storage &&
+          chrome.storage.local
+        ) {
+          chrome.storage.local.set({ replyTone: tone });
+          this.log(`Saved reply tone to local storage (fallback): ${tone}`);
+        }
+      } catch (localError) {
+        this.log(`Local storage fallback also failed: ${localError.message}`);
+      }
     }
   }
 
