@@ -1,85 +1,81 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Header from '@/components/Header';
-import StatsGrid from '@/components/StatsGrid';
-import Charts from '@/components/Charts';
-import RecentActivity from '@/components/RecentActivity';
-import SettingsModal from '@/components/SettingsModal';
-import Notification from '@/components/Notification';
-import { DashboardStats, NotificationType } from '@/types';
-import { StorageService } from '@/lib/storage';
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { createBrowserClient } from "@supabase/ssr";
+import { useEffect, useState } from "react";
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalReplies: 0,
-    todayReplies: 0,
-    avgResponseTime: 0,
-    favoriteMode: 'neutral',
-    dailyUsage: [],
-    toneDistribution: {}
-  });
-  
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: NotificationType;
-  } | null>(null);
+export default function Home() {
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    loadStats();
-    
-    // Auto-refresh stats every 30 seconds
-    const interval = setInterval(loadStats, 30000);
-    return () => clearInterval(interval);
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    supabase.auth.getUser().then(({ data: { user } }: any) => {
+      setUser(user);
+    });
   }, []);
 
-  const loadStats = async () => {
-    try {
-      const statsData = await StorageService.getStats();
-      
-      // Calculate today's replies
-      const today = new Date().toDateString();
-      const todayData = statsData.dailyUsage.find(day => day.date === today);
-      statsData.todayReplies = todayData ? todayData.count : 0;
-      
-      setStats(statsData);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
-  };
-
-  const showNotification = (message: string, type: NotificationType) => {
-    setNotification({ message, type });
-  };
-
-  const closeNotification = () => {
-    setNotification(null);
-  };
-
   return (
-    <div className="dashboard-container">
-      <Header onSettingsClick={() => setIsSettingsOpen(true)} />
-      
-      <main className="dashboard-main">
-        <StatsGrid stats={stats} />
-        <Charts stats={stats} />
-        <RecentActivity />
-      </main>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6">
+      <div className="text-center space-y-8">
+        {/* Logo/Brand */}
+        <Link href="/" className="block">
+          <span className="text-4xl md:text-5xl font-black text-black">
+            HumanReplies
+          </span>
+        </Link>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onNotification={showNotification}
-      />
-
-      {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={closeNotification}
-        />
-      )}
+        {/* Navigation Buttons */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {user && (
+            <Button
+              variant="outline"
+              className="chunky-button border-2 border-black text-black hover:bg-black hover:text-white rounded-lg bg-transparent w-full sm:w-auto"
+              asChild
+            >
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+          )}
+          {!user ? (
+            <>
+              <Button
+                variant="outline"
+                className="chunky-button border-2 border-black text-black hover:bg-black hover:text-white rounded-lg bg-transparent w-full sm:w-auto"
+                asChild
+              >
+                <Link href="/auth/login">Login</Link>
+              </Button>
+              <Button
+                className="chunky-button bg-orange-500 hover:bg-orange-600 text-white rounded-lg w-full sm:w-auto"
+                asChild
+              >
+                <Link href="/auth/sign-up">Get Started</Link>
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              className="chunky-button border-2 border-black text-black hover:bg-black hover:text-white rounded-lg bg-transparent w-full sm:w-auto"
+              onClick={() => {
+                const supabase = createBrowserClient(
+                  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+                );
+                supabase.auth.signOut().then(() => {
+                  setUser(null);
+                  window.location.href = "/";
+                });
+              }}
+            >
+              Logout
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

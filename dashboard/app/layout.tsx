@@ -1,22 +1,26 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
-
-const inter = Inter({ subsets: ['latin'] })
+import type React from "react";
+import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'HumanReplies Dashboard',
-  description: 'Monitor usage statistics and manage settings for HumanReplies browser extension',
-}
+  title: "HumanReplies - Generate Human-Like Social Media Replies",
+  description:
+    "A browser extension that helps you generate authentic, human-like replies for X, LinkedIn, and Facebook. Save time while staying genuine.",
+  generator: "Next.js",
+};
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
+        {children}
+      </body>
     </html>
-  )
+  );
 }
