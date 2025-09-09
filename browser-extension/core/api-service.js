@@ -1,59 +1,103 @@
 // Core API service for HumanReplies
 
 class HumanRepliesAPI {
-  constructor() {
+  constructor(environmentConfig = null) {
     // Initialize with environment config
-    this.initializeConfig();
-    this.serviceUrls = null; // Cache for service URLs
-    this.urlsCacheExpiry = null;
-  }
+    this.envConfig = environmentConfig;
 
-  async initializeConfig() {
-    // Load environment configuration
-    if (typeof window !== "undefined" && window.EnvironmentConfig) {
-      await window.EnvironmentConfig.loadEnvironment();
-      this.baseURL = window.EnvironmentConfig.getApiBaseURL();
-      this.debugMode = window.EnvironmentConfig.isDebugMode();
-
-      // Check for custom base URL override
-      const customURL = await window.EnvironmentConfig.getCustomBaseURL();
-      if (customURL) {
-        this.baseURL = customURL;
-      }
+    // Set defaults from environment or fallback
+    if (this.envConfig) {
+      this.baseURL = this.envConfig.getApiBaseURL();
+      this.debugMode = this.envConfig.isDebugMode();
+      this.environment = this.envConfig.getCurrentEnvironment();
     } else {
-      // Fallback configuration
-      this.baseURL = "http://localhost:8000/api/v1"; // Default to local development
-      this.debugMode = true;
+      // Fallback defaults
+      this.baseURL = undefined;
+      this.debugMode = false;
+      this.environment = "production";
     }
 
-    if (this.debugMode) {
-      console.log(`HumanReplies API initialized with baseURL: ${this.baseURL}`);
+    // Caching for service URLs
+    this.serviceUrls = null;
+    this.urlsCacheExpiry = null;
+
+    // Log initialization
+    console.log(
+      `HumanReplies API initialized with baseURL: ${this.baseURL || "(unset)"}`
+    );
+    console.log(
+      `HumanReplies API initialized with environment: ${this.environment}`
+    );
+  }
+
+  getBaseURL() {
+    return this.baseURL;
+  }
+
+  // ===== Internal helpers =====
+
+  _debug(...args) {
+    if (typeof addVisibleDebug === "function") {
+      addVisibleDebug("[HumanRepliesAPI]", ...args);
+    } else if (this.debugMode) {
+      // eslint-disable-next-line no-console
+      console.log("[HumanRepliesAPI]", ...args);
+    }
+  }
+
+  async _fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+    const abortSupported = typeof AbortController !== "undefined";
+    let controller;
+    let timeoutHandle;
+
+    try {
+      if (abortSupported) {
+        controller = new AbortController();
+        options.signal = controller.signal;
+      }
+
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          if (controller) controller.abort();
+          reject(new Error("Fetch timeout"));
+        }, timeoutMs);
+      });
+
+      const response = await Promise.race([
+        fetch(url, options),
+        timeoutPromise,
+      ]);
+      return response;
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
     }
   }
 
   async generateReply(context, options = {}) {
-    // Ensure config is loaded
+    // Check if config is loaded
     if (!this.baseURL) {
-      await this.initializeConfig();
+      throw new Error(
+        "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+      );
     }
 
     // Always use our backend now (no more fallback mode)
     return this.generateWithBackend(context, options);
   }
 
-  async generateWithBackend(context, options) {
+  async generateWithBackend(context, options = {}) {
     // Generate reply using our FastAPI backend (which proxies to external services)
     try {
+      const endpoint = `${this.baseURL}/services/generate-reply`;
       if (this.debugMode) {
-        console.log(
-          `Making request to: ${this.baseURL}/services/generate-reply`
-        );
+        this._debug("Making request to:", endpoint);
       }
 
-      // Get the token if available, but we'll proceed without it if not present
+      // Get the token if available, but proceed without it if not present
       const userToken = await this.getUserToken();
       const headers = {
         "Content-Type": "application/json",
+        Accept: "application/json",
       };
 
       // Only add the Authorization header if we have a token
@@ -61,11 +105,11 @@ class HumanRepliesAPI {
         headers.Authorization = `Bearer ${userToken}`;
       }
 
-      const response = await fetch(`${this.baseURL}/services/generate-reply`, {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: headers,
+        headers,
         body: JSON.stringify({
-          context: context,
+          context,
           platform: options.platform || "x",
           tone: options.tone || "helpful",
           length: options.length || "medium",
@@ -74,7 +118,6 @@ class HumanRepliesAPI {
       });
 
       if (!response.ok) {
-        // No longer requiring authentication - just passing through the error message
         if (response.status === 429) {
           throw new Error(
             "Daily limit reached. Upgrade for unlimited replies."
@@ -94,52 +137,55 @@ class HumanRepliesAPI {
 
       const data = await response.json();
 
-      // If the backend didn't generate a response, use pollinations directly from client
+      // Prefer backend result
       let finalReply = data.generated_response;
+      let serviceUsed = data.service_used || "backend";
 
+      // If the backend didn't return a response but did return a prompt,
+      // try Pollinations directly from the client
       if (!finalReply && data.generated_prompt) {
-        if (this.debugMode) {
-          console.log(
-            "Backend returned prompt but no response, using pollinations directly"
-          );
-        }
+        this._debug(
+          "Backend returned prompt but no response, using pollinations directly"
+        );
 
-        // Get service URLs to fetch the pollinations endpoint
-        const serviceUrls = await this.getServiceUrls();
-        const pollinationsUrl = serviceUrls.pollinations_url;
+        const { pollinations_url: pollinationsUrl } =
+          await this.getServiceUrls();
 
-        if (pollinationsUrl) {
-          // Make direct request to pollinations with the generated prompt
-          const encodedPrompt = encodeURIComponent(data.generated_prompt);
-          const pollinationsResponse = await fetch(
-            `${pollinationsUrl}/${encodedPrompt}?seed=${Math.random()
-              .toString(36)
-              .substring(2, 10)}`,
-            {
-              method: "GET",
-              headers: { Accept: "text/plain" },
-            }
-          );
-
-          if (pollinationsResponse.ok) {
-            finalReply = await pollinationsResponse.text();
-            finalReply = finalReply.trim().replace(/^["']|["']$/g, ""); // Remove surrounding quotes
-          } else {
-            throw new Error("Failed to generate response from AI service");
-          }
-        } else {
+        if (!pollinationsUrl) {
           throw new Error("AI service URL not available");
         }
+
+        const encodedPrompt = encodeURIComponent(data.generated_prompt);
+        // Add a small random seed to avoid heavy caching
+        const pollinationsResponse = await fetch(
+          `${pollinationsUrl}/${encodedPrompt}?seed=${Math.random()
+            .toString(36)
+            .substring(2, 10)}`,
+          {
+            method: "GET",
+            headers: { Accept: "text/plain" },
+          }
+        );
+
+        if (!pollinationsResponse.ok) {
+          throw new Error("Failed to generate response from AI service");
+        }
+
+        finalReply = (await pollinationsResponse.text())
+          .trim()
+          .replace(/^["']|["']$/g, "");
+        serviceUsed = "pollinations";
       }
 
       return {
         reply: finalReply,
-        remainingReplies: data.remaining_replies || null,
-        isLimitReached: data.is_limit_reached || false,
-        serviceUsed: "pollinations",
-        generatedPrompt: data.generated_prompt,
+        remainingReplies: data.remaining_replies ?? null,
+        isLimitReached: data.is_limit_reached ?? false,
+        serviceUsed,
+        generatedPrompt: data.generated_prompt ?? null,
       };
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Backend API error:", error);
       throw error;
     }
@@ -158,8 +204,9 @@ class HumanRepliesAPI {
       }
 
       if (this.debugMode) {
-        console.log(
-          `Fetching service URLs from: ${this.baseURL}/services/urls`
+        this._debug(
+          "Fetching service URLs from:",
+          `${this.baseURL}/services/urls`
         );
       }
 
@@ -167,6 +214,7 @@ class HumanRepliesAPI {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
       });
 
@@ -183,15 +231,17 @@ class HumanRepliesAPI {
         : new Date(Date.now() + 60 * 60 * 1000); // 1 hour fallback
 
       if (this.debugMode) {
-        console.log("Service URLs updated:", data);
+        this._debug("Service URLs updated:", data);
       }
 
       return data;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Failed to fetch service URLs:", error);
 
       // Return cached URLs if available, otherwise throw
       if (this.serviceUrls) {
+        // eslint-disable-next-line no-console
         console.warn("Using cached service URLs due to fetch error");
         return this.serviceUrls;
       }
@@ -200,22 +250,18 @@ class HumanRepliesAPI {
     }
   }
 
-  // buildPrompt method removed - now handled by backend
-
   async getUserToken() {
     return new Promise((resolve) => {
       const finish = (token, phase) => {
         if (this.debugMode) {
-          console.log("[API] getUserToken =>", {
-            phase,
-            tokenPresent: !!token,
-          });
+          this._debug("[getUserToken] =>", { phase, tokenPresent: !!token });
         }
         resolve(token || null);
       };
 
       // Check if chrome.storage is available
       if (typeof chrome === "undefined" || !chrome.storage) {
+        // eslint-disable-next-line no-console
         console.warn("[API] chrome.storage not available");
         return finish(null, "no-chrome-storage");
       }
@@ -224,6 +270,7 @@ class HumanRepliesAPI {
         // First check for new userState format (priority)
         chrome.storage.local.get(["userState"], (userStateResult) => {
           if (chrome.runtime.lastError) {
+            // eslint-disable-next-line no-console
             console.warn(
               "[API] getUserToken userState error:",
               chrome.runtime.lastError
@@ -232,21 +279,28 @@ class HumanRepliesAPI {
             return;
           }
 
-          if (userStateResult && userStateResult.userState && userStateResult.userState.access_token) {
-            return finish(userStateResult.userState.access_token, "userState");
+          const token =
+            userStateResult &&
+            userStateResult.userState &&
+            userStateResult.userState.access_token;
+
+          if (token) {
+            return finish(token, "userState");
           }
           tryLegacyFormats();
         });
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.warn("[API] getUserToken userState failed, trying legacy", e);
         tryLegacyFormats();
       }
 
-      function tryLegacyFormats() {
+      const tryLegacyFormats = () => {
         // Try sync storage with legacy userToken format
         try {
           chrome.storage.sync.get(["userToken"], (result) => {
             if (chrome.runtime.lastError) {
+              // eslint-disable-next-line no-console
               console.warn(
                 "[API] getUserToken sync error:",
                 chrome.runtime.lastError
@@ -261,15 +315,17 @@ class HumanRepliesAPI {
             tryLocalStorage();
           });
         } catch (e) {
+          // eslint-disable-next-line no-console
           console.warn("[API] getUserToken sync failed, trying local", e);
           tryLocalStorage();
         }
-      }
+      };
 
-      function tryLocalStorage() {
+      const tryLocalStorage = () => {
         try {
           chrome.storage.local.get(["userToken"], (localResult) => {
             if (chrome.runtime.lastError) {
+              // eslint-disable-next-line no-console
               console.warn(
                 "[API] getUserToken local error:",
                 chrome.runtime.lastError
@@ -284,16 +340,18 @@ class HumanRepliesAPI {
             tryBackgroundFallback();
           });
         } catch (err) {
+          // eslint-disable-next-line no-console
           console.error("[API] getUserToken local failure", err);
           tryBackgroundFallback();
         }
-      }
+      };
 
-      function tryBackgroundFallback() {
+      const tryBackgroundFallback = () => {
         // Background cache fallback
         try {
           chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
             if (chrome.runtime.lastError) {
+              // eslint-disable-next-line no-console
               console.warn(
                 "[API] getUserToken background error:",
                 chrome.runtime.lastError
@@ -305,45 +363,12 @@ class HumanRepliesAPI {
             finish(bgToken, "background");
           });
         } catch (err) {
+          // eslint-disable-next-line no-console
           console.error("[API] getUserToken background failure", err);
           finish(null, "none");
         }
-      }
-    });
-  }
-
-  // storeReply method removed - now handled automatically by backend
-
-  async checkUserLimits() {
-    // Check daily limits from backend
-    try {
-      // Get the token if available, but we'll proceed without it if not present
-      const userToken = await this.getUserToken();
-      const headers = {};
-
-      // Only add the Authorization header if we have a token
-      if (userToken) {
-        headers.Authorization = `Bearer ${userToken}`;
-      }
-
-      const response = await fetch(`${this.baseURL}/user/limits`, {
-        headers: headers,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to check limits: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        remainingReplies: data.remainingReplies,
-        isLimitReached: data.remainingReplies <= 0,
       };
-    } catch (error) {
-      console.error("Failed to check limits:", error);
-      // Return unlimited for now if we can't check limits
-      return { remainingReplies: null, isLimitReached: false };
-    }
+    });
   }
 
   async getServiceStatus() {
@@ -358,77 +383,97 @@ class HumanRepliesAPI {
         },
       };
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Failed to get service status:", error);
       return null;
     }
   }
 
-  async getTones() {
+  async getTones(options = {}) {
     // Get available tones from backend (includes user's custom tones if authenticated)
+    const t0 =
+      typeof performance !== "undefined" && performance.now
+        ? performance.now()
+        : Date.now();
+    const vdbg = (...args) => {
+      if (typeof addVisibleDebug === "function") {
+        addVisibleDebug("[getTones]", ...args);
+      } else if (this.debugMode) {
+        // eslint-disable-next-line no-console
+        console.log("[getTones]", ...args);
+      }
+    };
+
     try {
-      // Ensure config is loaded
-      if (!this.baseURL) {
-        console.log("[API] getTones: baseURL not set, initializing config...");
-        await this.initializeConfig();
+      vdbg("start");
+      const timeoutMs =
+        typeof options.timeoutMs === "number" ? options.timeoutMs : 8000;
+      if (options.reason) vdbg("reason", options.reason);
+
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        vdbg("offline detected (navigator.onLine === false) -> fallback");
+        return this._fallbackTones(vdbg, "offline");
       }
 
-      console.log(`[API] getTones: Fetching tones from: ${this.baseURL}/tones/`);
+      if (!this.baseURL) {
+        vdbg("baseURL missing -> fallback");
+        return this._fallbackTones(vdbg, "no baseURL configured");
+      }
+
+      const tonesUrl = `${this.baseURL}/tones/`;
+      vdbg("fetching", tonesUrl);
 
       // Get the token if available
       const userToken = await this.getUserToken();
-      console.log("[API] getTones: Got user token:", userToken ? "YES" : "NO");
-      
+      vdbg("token present?", !!userToken);
+
       const headers = {
         "Content-Type": "application/json",
+        Accept: "application/json",
       };
-
-      // Add authorization header if we have a token
       if (userToken) {
         headers.Authorization = `Bearer ${userToken}`;
-        console.log("[API] getTones: Added Authorization header");
+        vdbg("auth header added");
       }
 
-      console.log("[API] getTones: Making fetch request...");
-      const response = await fetch(`${this.baseURL}/tones/`, {
-        method: "GET",
-        headers: headers,
-      });
+      const response = await this._fetchWithTimeout(
+        tonesUrl,
+        { method: "GET", headers },
+        timeoutMs
+      );
 
-      console.log("[API] getTones: Response status:", response.status, response.statusText);
+      vdbg("status", response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch tones: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log("[API] getTones: Response data:", data);
+      const data = await response.json().catch(() => ({}));
+      vdbg("response parsed (keys)", Object.keys(data || {}));
 
-      if (this.debugMode) {
-        console.log("Tones fetched:", data);
-      }
+      const tones = Array.isArray(data.tones) ? data.tones : [];
+      const t1 =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+      vdbg("returning", tones.length, "tones in", Math.round(t1 - t0) + "ms");
 
-      const tones = data.tones || [];
-      console.log("[API] getTones: Returning", tones.length, "tones");
-      return tones;
+      return tones.length ? tones : this._fallbackTones(vdbg, "empty response");
     } catch (error) {
-      console.error("[API] getTones: Failed to fetch tones:", error);
-      console.error("[API] getTones: Error details:", {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
+      const message = (error && error.message) || String(error);
 
-      // Return fallback tones if API fails (excluding "ask" - handled by frontend)
-      const fallbackTones = [
-        { name: "neutral", display_name: "👍 Neutral" },
-        { name: "joke", display_name: "😂 Joke" },
-        { name: "support", display_name: "❤️ Support" },
-        { name: "idea", display_name: "💡 Idea" },
-        { name: "question", display_name: "❓ Question" },
-        { name: "confident", display_name: "💪 Confident" },
-      ];
-      console.log("[API] getTones: Using fallback tones:", fallbackTones.length);
-      return fallbackTones;
+      // Set API is offline
+      this.isApiOnline = false;
+      if (
+        /(Failed to fetch|NetworkError|Load failed|timeout|abort)/i.test(
+          message
+        )
+      ) {
+        throw new Error("API is offline.");
+      }
+      // eslint-disable-next-line no-console
+      console.error("[getTones] error", error);
+      throw new Error("API is offline.");
     }
   }
 
@@ -436,7 +481,9 @@ class HumanRepliesAPI {
     // Create a custom tone for the authenticated user
     try {
       if (!this.baseURL) {
-        await this.initializeConfig();
+        throw new Error(
+          "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+        );
       }
 
       const userToken = await this.getUserToken();
@@ -448,6 +495,7 @@ class HumanRepliesAPI {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify(toneData),
@@ -463,85 +511,12 @@ class HumanRepliesAPI {
       const data = await response.json();
       return data;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Failed to create custom tone:", error);
       throw error;
     }
   }
-
-  async updateCustomTone(toneId, toneData) {
-    // Update a custom tone
-    try {
-      if (!this.baseURL) {
-        await this.initializeConfig();
-      }
-
-      const userToken = await this.getUserToken();
-      if (!userToken) {
-        throw new Error("Authentication required to update custom tones");
-      }
-
-      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userToken}`,
-        },
-        body: JSON.stringify(toneData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.detail || `Failed to update tone: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error("Failed to update custom tone:", error);
-      throw error;
-    }
-  }
-
-  async deleteCustomTone(toneId) {
-    // Delete a custom tone
-    try {
-      if (!this.baseURL) {
-        await this.initializeConfig();
-      }
-
-      const userToken = await this.getUserToken();
-      if (!userToken) {
-        throw new Error("Authentication required to delete custom tones");
-      }
-
-      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.detail || `Failed to delete tone: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error("Failed to delete custom tone:", error);
-      throw error;
-    }
-  }
 }
 
-// Export for use in other modules
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = HumanRepliesAPI;
-} else {
-  window.HumanRepliesAPI = HumanRepliesAPI;
-}
+// ES module export
+export default HumanRepliesAPI;

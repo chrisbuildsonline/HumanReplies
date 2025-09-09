@@ -1,12 +1,31 @@
 // Background service worker for HumanReplies extension
 
-// Import the API service
-importScripts("core/api-service.js");
+// Import the API service and environment config
+import environmentConfig from "./config/environment.js";
+import HumanRepliesAPI from "./core/api-service.js";
 
 // In-memory auth cache (service worker can be restarted; we persist a copy in local storage as well)
 let currentAuthState = null;
+let tonesCache = null;
+let apiService = null;
 
-const apiService = new HumanRepliesAPI();
+// Initialize API service with environment config
+async function initializeApiService() {
+  if (!apiService) {
+    await environmentConfig.loadEnvironment();
+    apiService = new HumanRepliesAPI(environmentConfig);
+  }
+  return apiService;
+}
+
+// Initialize on startup
+initializeApiService()
+  .then(() => {
+    console.log("Background service worker initialized");
+  })
+  .catch((error) => {
+    console.error("Failed to initialize background service worker:", error);
+  });
 
 // We'll handle CORS on the server side instead
 
@@ -46,9 +65,77 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "cacheTones") {
+    // Cache tones in background script memory and storage
+    tonesCache = {
+      tones: request.tones,
+      timestamp: request.timestamp,
+      cachedAt: Date.now(),
+    };
+
+    // Persist to storage
+    chrome.storage.local.set(
+      {
+        humanreplies_tones: request.tones,
+        humanreplies_tones_timestamp: request.timestamp,
+        HR_BG_TONES_CACHE: tonesCache,
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "[BG] Failed to cache tones:",
+            chrome.runtime.lastError
+          );
+          sendResponse({
+            success: false,
+            error: chrome.runtime.lastError.message,
+          });
+        } else {
+          console.log(
+            "[BG] Tones cached successfully:",
+            request.tones.length,
+            "tones"
+          );
+          sendResponse({ success: true });
+        }
+      }
+    );
+    return true;
+  }
+
+  if (request.action === "getTones") {
+    // Return cached tones if available
+    if (tonesCache && tonesCache.tones) {
+      sendResponse({ success: true, tones: tonesCache.tones, fromCache: true });
+      return true;
+    }
+
+    // Try to load from storage
+    chrome.storage.local.get(
+      ["humanreplies_tones", "HR_BG_TONES_CACHE"],
+      (res) => {
+        if (res.humanreplies_tones) {
+          tonesCache = res.HR_BG_TONES_CACHE || {
+            tones: res.humanreplies_tones,
+            timestamp: Date.now(),
+            cachedAt: Date.now(),
+          };
+          sendResponse({
+            success: true,
+            tones: res.humanreplies_tones,
+            fromCache: true,
+          });
+        } else {
+          sendResponse({ success: false, error: "No cached tones found" });
+        }
+      }
+    );
+    return true;
+  }
+
   if (request.action === "generateReply") {
-    apiService
-      .generateReply(request.context, request.options)
+    initializeApiService()
+      .then((api) => api.generateReply(request.context, request.options))
       .then((result) => {
         sendResponse({ success: true, ...result });
       })
@@ -57,45 +144,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true; // Keep message channel open for async response
   }
-
-  if (request.action === "checkLimits") {
-    apiService
-      .checkUserLimits()
-      .then((limits) => {
-        sendResponse({ success: true, ...limits });
-      })
-      .catch((error) => {
-        sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
 });
 
 // Extension installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log("HumanReplies extension installed");
-
-  // Set default settings
-  chrome.storage.sync.set({
-    dailyLimit: 20,
-    usedReplies: 0,
-    lastResetDate: new Date().toDateString(),
-  });
-});
-
-// Reset daily counter at midnight
-chrome.alarms.create("resetDailyLimit", {
-  when: getNextMidnight(),
-  periodInMinutes: 24 * 60,
-});
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "resetDailyLimit") {
-    chrome.storage.sync.set({
-      usedReplies: 0,
-      lastResetDate: new Date().toDateString(),
-    });
-  }
 });
 
 function getNextMidnight() {

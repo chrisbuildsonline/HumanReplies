@@ -1,39 +1,77 @@
 // LinkedIn Integration for HumanReplies
 // Injects HumanReplies button next to LinkedIn comment reply areas and handles reply insertion
-(function () {
-  // Use global HumanRepliesAPI
-  const api = window.HumanRepliesAPI ? new window.HumanRepliesAPI() : null;
+
+export function initLinkedInIntegration(apiService) {
+  const api = apiService;
   let availableTones = null;
   let tonesLoading = null;
 
   async function loadAvailableTones() {
     if (availableTones) return availableTones;
     if (tonesLoading) return tonesLoading;
+
     tonesLoading = (async () => {
       try {
-        // Try cache first (5 min)
-        const cached = localStorage.getItem("humanreplies_tones");
-        const ts = parseInt(
-          localStorage.getItem("humanreplies_tones_timestamp") || "0",
-          10
-        );
-        if (cached && Date.now() - ts < 5 * 60 * 1000) {
-          availableTones = JSON.parse(cached);
+        // First try to get from background script cache
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+          try {
+            const bgResult = await new Promise((resolve) => {
+              chrome.runtime.sendMessage({ action: "getTones" }, (response) => {
+                if (chrome.runtime.lastError) {
+                  resolve({ success: false });
+                } else {
+                  resolve(response || { success: false });
+                }
+              });
+            });
+
+            if (bgResult.success && bgResult.tones) {
+              console.log(
+                "[HumanReplies][LinkedIn] Loaded",
+                bgResult.tones.length,
+                "tones from background cache"
+              );
+              availableTones = bgResult.tones;
+              return availableTones;
+            }
+          } catch (e) {
+            console.warn(
+              "[HumanReplies][LinkedIn] Background cache failed:",
+              e
+            );
+          }
+        }
+
+        // Fallback: read from chrome local storage (no API calls)
+        const result = await new Promise((resolve) => {
+          if (typeof chrome === "undefined" || !chrome.storage) {
+            resolve({});
+            return;
+          }
+          chrome.storage.local.get(["humanreplies_tones"], resolve);
+        });
+
+        const cached = result.humanreplies_tones;
+        if (cached && Array.isArray(cached)) {
+          console.log(
+            "[HumanReplies][LinkedIn] Loaded",
+            cached.length,
+            "tones from chrome storage"
+          );
+          availableTones = cached;
           return availableTones;
         }
-        if (api) {
-          const tones = await api.getTones();
-          availableTones = tones;
-          localStorage.setItem("humanreplies_tones", JSON.stringify(tones));
-          localStorage.setItem(
-            "humanreplies_tones_timestamp",
-            Date.now().toString()
-          );
-          return tones;
-        }
+
+        console.warn(
+          "[HumanReplies][LinkedIn] No tones found in chrome storage, using fallback"
+        );
       } catch (e) {
-        console.warn("[HumanReplies][LinkedIn] Failed to load tones:", e);
+        console.warn(
+          "[HumanReplies][LinkedIn] Failed to load tones from storage:",
+          e
+        );
       }
+
       // Fallback preset tones
       availableTones = [
         { name: "neutral", display_name: "👍 Neutral", is_preset: true },
@@ -45,6 +83,7 @@
       ];
       return availableTones;
     })();
+
     return tonesLoading;
   }
 
@@ -330,4 +369,4 @@
 
   // Initial injection
   safeInjectButtons();
-})();
+}

@@ -1,9 +1,13 @@
 // Popup script for HumanReplies extension
+import HumanRepliesAPI from "./core/api-service.js";
+import SupabaseClient from "./supabase-client.js";
+import AuthManager from "./auth-manager.js";
+
 addVisibleDebug("[Popup] script file loaded");
 addVisibleDebug("[Popup] Starting popup.js execution...");
 
 // Add visible debug info to the page
-function addVisibleDebug(message) {
+function addVisibleDebug(...parts) {
   try {
     let debugDiv = document.getElementById("visibleDebug");
     if (!debugDiv) {
@@ -26,15 +30,27 @@ function addVisibleDebug(message) {
       document.body.appendChild(debugDiv);
     }
     const time = new Date().toLocaleTimeString();
+    const message = parts
+      .map((p) => {
+        if (p === undefined) return "undefined";
+        if (p === null) return "null";
+        if (typeof p === "object") {
+          try {
+            return JSON.stringify(p);
+          } catch (_) {
+            return "[object]";
+          }
+        }
+        return String(p);
+      })
+      .join(" ");
     debugDiv.innerHTML += `[${time}] ${message}<br>`;
     debugDiv.scrollTop = debugDiv.scrollHeight;
   } catch (e) {
-    // Fallback to title
-    document.title = message;
+    // Fallback to title (only first part)
+    document.title = parts[0] ? String(parts[0]) : "(debug error)";
   }
 }
-
-addVisibleDebug("popup.js loaded");
 
 function appendDebug(message) {
   try {
@@ -52,14 +68,215 @@ class PopupManager {
     this.isLoggedIn = false;
     this.currentUser = null;
     this.currentTone = "ask";
+    this.api = null;
+    this.isApiOnline = false; // Track API status
+    this.apiStatusChecked = false; // Track if we've checked API status
+    this.isOnSupportedSite = null; // Track if current site is supported (null = not checked yet)
 
+    // Initialize async
+    this.loadApiStatus(); // Load saved status first
+    this.initializeApi();
+    this.initializeOtherComponents();
+  }
+
+  async initializeApi() {
     try {
+      addVisibleDebug("Before HumanRepliesAPI created");
+
+    // Get environment config and initialize API service
+    const envConfig = window.EnvironmentConfig;
+    addVisibleDebug("EnvironmentConfig check:", {
+      exists: !!envConfig,
+      type: typeof envConfig,
+      constructor: envConfig?.constructor?.name
+    });
+    
+    if (envConfig) {
+      await envConfig.loadEnvironment();
+      const config = envConfig.getConfig();
+      addVisibleDebug("Environment config loaded:", {
+        environment: envConfig.getCurrentEnvironment(),
+        apiBaseURL: config.apiBaseURL,
+        debug: config.debug,
+      });
+
+      this.api = new HumanRepliesAPI(envConfig);
+      addVisibleDebug(
+        "After HumanRepliesAPI created with environment config"
+      );
+    } else {
+      addVisibleDebug("WARNING: No EnvironmentConfig found, using fallback");
       this.api = new HumanRepliesAPI();
-      addVisibleDebug("HumanRepliesAPI created");
+      addVisibleDebug(
+        "After HumanRepliesAPI created without environment config"
+      );
+    }      // Log final API configuration
+      if (this.api) {
+        addVisibleDebug("Final API config:", {
+          baseURL: this.api.getBaseURL(),
+          environment: this.api.environment,
+          debugMode: this.api.debugMode,
+        });
+      }
+
+      // Start early pre-load of tones after API is ready
+      this.preloadTones();
+
+      // Start periodic API status checking (every 30 seconds)
+      this.startApiStatusChecking();
     } catch (e) {
       addVisibleDebug("HumanRepliesAPI error: " + e.message);
+      this.isApiOnline = false;
+      this.apiStatusChecked = true;
+      this.updateExtensionStatus();
+    }
+  }
+
+  startApiStatusChecking() {
+    // Check API status every 30 seconds
+    setInterval(() => {
+      this.checkApiStatus();
+    }, 30000);
+  }
+
+  async checkApiStatus(isManualRefresh = false) {
+    if (!this.api) {
+      this.isApiOnline = false;
+      this.apiStatusChecked = true;
+      this.saveApiStatus();
+      this.updateExtensionStatus();
+      addVisibleDebug("[CheckAPI] No API instance available");
+      return;
     }
 
+    const wasOnline = this.isApiOnline;
+    const refreshType = isManualRefresh ? "Manual Refresh" : "StatusCheck";
+
+    // Log detailed API info
+    addVisibleDebug(`[${refreshType}] Starting API check...`);
+    addVisibleDebug(`[${refreshType}] API baseURL:`, this.api.getBaseURL());
+    addVisibleDebug(`[${refreshType}] Environment:`, this.api.environment);
+
+    try {
+      // Quick ping to check if API is responding
+      const tones = await this.api.getTones({
+        timeoutMs: isManualRefresh ? 5000 : 3000, // Longer timeout for manual refresh
+        reason: isManualRefresh ? "manual-refresh" : "status-check",
+      });
+
+      addVisibleDebug(`[${refreshType}] API response:`, {
+        tonesReceived: tones ? tones.length : 0,
+        isArray: Array.isArray(tones),
+        firstTone: tones && tones[0] ? tones[0].name : "none",
+      });
+
+      this.isApiOnline = tones && tones.length > 0;
+
+      addVisibleDebug(
+        `[${refreshType}] API is`,
+        this.isApiOnline ? "online" : "offline",
+        `(${tones ? tones.length : 0} tones)`
+      );
+
+      // If API came back online, reload tones
+      if (!wasOnline && this.isApiOnline) {
+        addVisibleDebug("[StatusCheck] API restored, reloading tones...");
+        this.allTones = tones; // Update tones from the successful call
+        await this.loadTones(); // Refresh the UI
+        if (this.isLoggedIn) {
+          this.loadCustomTones(); // Reload custom tones if logged in
+        }
+      }
+    } catch (err) {
+      this.isApiOnline = false;
+      addVisibleDebug(`[${refreshType}] API error:`, {
+        message: err.message,
+        name: err.name,
+        stack: err.stack ? err.stack.substring(0, 200) + "..." : "no stack",
+      });
+    }
+
+    this.apiStatusChecked = true;
+    this.saveApiStatus();
+    this.updateExtensionStatus();
+  }
+
+  saveApiStatus() {
+    // Store API status in Chrome storage for other parts of extension to access
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      chrome.storage.local
+        .set({
+          humanreplies_api_status: {
+            isOnline: this.isApiOnline,
+            lastChecked: Date.now(),
+          },
+        })
+        .catch((err) => {
+          addVisibleDebug("[StatusSave] Error saving API status:", err.message);
+        });
+    }
+  }
+
+  async loadApiStatus() {
+    // Load saved API status from Chrome storage
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      try {
+        const result = await new Promise((resolve) => {
+          chrome.storage.local.get(["humanreplies_api_status"], resolve);
+        });
+
+        if (result.humanreplies_api_status) {
+          const status = result.humanreplies_api_status;
+          const isRecent = Date.now() - status.lastChecked < 60000; // 1 minute
+
+          if (isRecent) {
+            this.isApiOnline = status.isOnline;
+            this.apiStatusChecked = true;
+            addVisibleDebug(
+              "[StatusLoad] Loaded API status:",
+              this.isApiOnline ? "online" : "offline"
+            );
+            this.updateExtensionStatus();
+          }
+        }
+      } catch (err) {
+        addVisibleDebug("[StatusLoad] Error loading API status:", err.message);
+      }
+    }
+  }
+
+  async preloadTones() {
+    // Early pre-load of tones (non-blocking) AFTER api is initialized
+    try {
+      addVisibleDebug("[EarlyTones] Calling api.getTones()...");
+      if (!this.api) {
+        addVisibleDebug("[EarlyTones] API not ready yet");
+        this.isApiOnline = false;
+        this.apiStatusChecked = true;
+        this.saveApiStatus();
+        this.updateExtensionStatus(); // Update UI with offline status
+        return;
+      }
+      const tones = await this.api.getTones({
+        timeoutMs: 2000,
+        reason: "early-preload",
+      });
+      addVisibleDebug("[EarlyTones] Received tones count:", tones.length);
+      this.allTones = tones;
+      this.isApiOnline = true;
+      this.apiStatusChecked = true;
+      this.saveApiStatus();
+      this.updateExtensionStatus(); // Update UI with online status
+    } catch (err) {
+      addVisibleDebug("[EarlyTones] Error fetching tones:", err.message);
+      this.isApiOnline = false;
+      this.apiStatusChecked = true;
+      this.saveApiStatus();
+      this.updateExtensionStatus(); // Update UI with offline status
+    }
+  }
+
+  initializeOtherComponents() {
     try {
       this.supabase = new SupabaseClient();
       addVisibleDebug("SupabaseClient created");
@@ -304,35 +521,122 @@ class PopupManager {
           "facebook.com",
         ];
 
-        const statusElement = document.getElementById("statusText");
-        const statusIndicator = document.getElementById("statusIndicator");
-        const statusContainer = document.getElementById("extensionStatus");
-
-        const isSupported = supportedSites.some((site) =>
+        this.isOnSupportedSite = supportedSites.some((site) =>
           hostname.includes(site)
         );
 
-        if (isSupported) {
-          // Update status indicators to show active
-          statusElement.textContent = "Extension Active";
-          statusContainer.classList.remove("logged-out");
-          statusContainer.classList.add("logged-in");
-          statusElement.classList.remove("logged-out");
-          statusElement.classList.add("logged-in");
-          statusIndicator.classList.remove("logged-out");
-          statusIndicator.classList.add("logged-in");
-        } else {
-          // Update status indicators to show disabled
-          statusElement.textContent = "Extension is disabled";
-          statusContainer.classList.remove("logged-in");
-          statusContainer.classList.add("logged-out");
-          statusElement.classList.remove("logged-in");
-          statusElement.classList.add("logged-out");
-          statusIndicator.classList.remove("logged-in");
-          statusIndicator.classList.add("logged-out");
-        }
+        this.updateExtensionStatus();
       }
     });
+  }
+
+  updateExtensionStatus() {
+    const statusElement = document.getElementById("statusText");
+    const statusIndicator = document.getElementById("statusIndicator");
+    const statusContainer = document.getElementById("extensionStatus");
+
+    if (!statusElement || !statusIndicator || !statusContainer) {
+      return; // Elements not ready yet
+    }
+
+    let statusText = "";
+    let isActive = false;
+
+    // Priority: API status first, then site support
+    if (this.apiStatusChecked && !this.isApiOnline) {
+      statusText = "HumanReplies API offline";
+      isActive = false;
+    }
+
+    // Clear existing content and create elements
+    statusElement.innerHTML = "";
+
+    // Add the status text
+    const textSpan = document.createElement("span");
+    textSpan.textContent = statusText;
+    statusElement.appendChild(textSpan);
+
+    statusContainer.style.display = "flex";
+
+    // Add refresh button for offline API status
+    if (!this.isApiOnline) {
+      const refreshButton = document.createElement("button");
+      refreshButton.innerHTML = "🔄";
+      refreshButton.title = "Retry API connection";
+      refreshButton.style.cssText = `
+        background: none;
+        border: none;
+        color: inherit;
+        margin-left: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 2px 4px;
+        border-radius: 3px;
+        transition: background-color 0.2s;
+      `;
+
+      // Add hover effect
+      refreshButton.addEventListener("mouseenter", () => {
+        refreshButton.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+      });
+      refreshButton.addEventListener("mouseleave", () => {
+        refreshButton.style.backgroundColor = "transparent";
+      });
+
+      // Add click handler to retry API connection
+      refreshButton.addEventListener("click", async (e) => {
+        e.stopPropagation();
+
+        // Show loading state
+        refreshButton.innerHTML = "⏳";
+        refreshButton.disabled = true;
+
+        addVisibleDebug("[Manual Refresh] Retrying API connection...");
+
+        try {
+          // Force immediate API status check with manual refresh flag
+          await this.checkApiStatus(true);
+
+          if (this.isApiOnline) {
+            addVisibleDebug("[Manual Refresh] API is now online!");
+            this.showSuccess("API connection restored!");
+          } else {
+            addVisibleDebug("[Manual Refresh] API still offline");
+            this.showError("API still offline. Please try again later.");
+          }
+        } catch (error) {
+          addVisibleDebug("[Manual Refresh] Retry failed:", error.message);
+          this.showError("Failed to check API status");
+        } finally {
+          // Reset button after a short delay
+          setTimeout(() => {
+            refreshButton.innerHTML = "🔄";
+            refreshButton.disabled = false;
+          }, 1000);
+        }
+      });
+
+      statusElement.appendChild(refreshButton);
+    } else {
+      // Remove the element
+      statusContainer.style.display = "none";
+    }
+
+    if (isActive) {
+      statusContainer.classList.remove("logged-out");
+      statusContainer.classList.add("logged-in");
+      statusElement.classList.remove("logged-out");
+      statusElement.classList.add("logged-in");
+      statusIndicator.classList.remove("logged-out");
+      statusIndicator.classList.add("logged-in");
+    } else {
+      statusContainer.classList.remove("logged-in");
+      statusContainer.classList.add("logged-out");
+      statusElement.classList.remove("logged-in");
+      statusElement.classList.add("logged-out");
+      statusIndicator.classList.remove("logged-in");
+      statusIndicator.classList.add("logged-out");
+    }
   }
 
   setupEventListeners() {
@@ -645,7 +949,9 @@ class PopupManager {
       const tones = await this.api.getTones();
       this.allTones = tones; // Store for later use
 
-      addVisibleDebug("Got " + tones.length + " tones from API: " + JSON.stringify(tones));
+      addVisibleDebug(
+        "Got " + tones.length + " tones from API: " + JSON.stringify(tones)
+      );
 
       // Re-get elements in case they changed
       const toneSelectLoggedOut = document.getElementById(
@@ -1092,6 +1398,55 @@ window.debugAuth = async function () {
   });
   console.log("Current auth storage:", result);
   return result;
+};
+
+window.testApiDirect = async function () {
+  addVisibleDebug("[DirectTest] Starting direct API test...");
+
+  try {
+    // Test 1: Direct fetch to the API
+    addVisibleDebug("[DirectTest] Testing direct fetch...");
+    const response = await fetch("http://localhost:8000/api/v1/tones/", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
+
+    addVisibleDebug("[DirectTest] Response status:", response.status);
+
+    if (response.ok) {
+      const data = await response.json();
+      addVisibleDebug("[DirectTest] Response data:", {
+        hasTones: !!data.tones,
+        tonesCount: data.tones ? data.tones.length : 0,
+      });
+    } else {
+      addVisibleDebug("[DirectTest] Response not OK:", response.statusText);
+    }
+  } catch (error) {
+    addVisibleDebug("[DirectTest] Direct fetch error:", error.message);
+  }
+
+  // Test 2: Using the API service
+  if (window.popupManager && window.popupManager.api) {
+    addVisibleDebug("[DirectTest] Testing via API service...");
+    try {
+      const tones = await window.popupManager.api.getTones({
+        timeoutMs: 10000,
+        reason: "direct-test",
+      });
+      addVisibleDebug("[DirectTest] API service result:", {
+        tonesCount: tones ? tones.length : 0,
+        firstTone: tones && tones[0] ? tones[0].name : "none",
+      });
+    } catch (error) {
+      addVisibleDebug("[DirectTest] API service error:", error.message);
+    }
+  } else {
+    addVisibleDebug("[DirectTest] No API service available");
+  }
 };
 
 window.forceRefresh = function () {

@@ -27,26 +27,24 @@
         "https://twitter.com/*"
       ],
       "js": [
-        "config/environment.js",
-        "core/api-service.js",
-        "platforms/x-integration.js"
+        "content-scripts/x-content.js"
       ],
       "css": [
         "styles.css"
-      ]
+      ],
+      "type": "module"
     },
     {
       "matches": [
         "https://www.linkedin.com/*"
       ],
       "js": [
-        "config/environment.js",
-        "core/api-service.js",
-        "platforms/linkedin-integration.js"
+        "content-scripts/linkedin-content.js"
       ],
       "css": [
         "styles.css"
-      ]
+      ],
+      "type": "module"
     }
   ],
   "icons": {
@@ -56,13 +54,13 @@
     "128": "avatar.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup.html",
     "default_title": "HumanReplies"
   },
-  "options_page": "options.html",
   "web_accessible_resources": [
     {
       "resources": [

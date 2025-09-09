@@ -541,15 +541,22 @@
 
     <div class="footer">
       <p>Version 1.0.0</p>
+      <div style="margin-top: 10px;">
+        <button onclick="window.debugStorage && window.debugStorage()"
+          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Debug Storage</button>
+        <button onclick="window.clearTonesCache && window.clearTonesCache()"
+          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Clear Cache</button>
+        <button onclick="window.popupManager && window.popupManager.loadAvailableTones()"
+          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Reload Tones</button>
+        <button onclick="window.testApiCall && window.testApiCall()"
+          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Test API</button>
+      </div>
     </div>
   </div>
 
-  <script src="config/environment.js"></script>
-  <script src="log-util.js"></script>
-  <script src="core/api-service.js"></script>
-  <script src="supabase-client.js"></script>
-  <script src="auth-manager.js"></script>
-  <script src="popup.js"></script>
+
+  <script type="module" src="config/environment.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 
 </html>

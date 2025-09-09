@@ -29,46 +29,40 @@ class EnvironmentConfig {
     // Default environment - change this for different builds
     this.currentEnvironment = "development";
 
-    // Load environment from storage or manifest
+    // Load persisted environment (local storage) – no auto production fallback
     this.loadEnvironment();
   }
 
   async loadEnvironment() {
     try {
-      // Try to get environment from chrome storage first
-      const result = await new Promise((resolve) => {
-        chrome.storage.sync.get(["environment"], resolve);
-      });
-
-      if (result.environment && this.environments[result.environment]) {
-        this.currentEnvironment = result.environment;
-      } else {
-        // Try to detect from manifest or URL
-        this.detectEnvironment();
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.local
+      ) {
+        const result = await new Promise((resolve) => {
+          chrome.storage.local.get(["environment"], resolve);
+        });
+        if (result.environment && this.environments[result.environment]) {
+          this.currentEnvironment = result.environment;
+        }
       }
     } catch (error) {
-      console.warn("Could not load environment from storage:", error);
-      this.detectEnvironment();
+      console.warn(
+        "EnvironmentConfig: loadEnvironment failed, keeping default:",
+        error
+      );
     }
+    console.log(
+      "[EnvironmentConfig] Active environment:",
+      this.currentEnvironment
+    );
   }
 
   detectEnvironment() {
-    // Auto-detect environment based on extension context
-    if (typeof chrome !== "undefined" && chrome.runtime) {
-      const manifest = chrome.runtime.getManifest();
-
-      // Check if this is a development build
-      if (
-        manifest.name.includes("Dev") ||
-        manifest.name.includes("Development")
-      ) {
-        this.currentEnvironment = "development";
-      } else if (manifest.name.includes("Staging")) {
-        this.currentEnvironment = "staging";
-      } else {
-        this.currentEnvironment = "production";
-      }
-    }
+    // Intentionally no-op now; we rely solely on explicit setting or default.
+    // Left in place for backward compatibility if called elsewhere.
+    return this.currentEnvironment;
   }
 
   getConfig() {
@@ -95,9 +89,16 @@ class EnvironmentConfig {
 
       // Save to storage
       try {
-        await new Promise((resolve) => {
-          chrome.storage.sync.set({ environment: env }, resolve);
-        });
+        if (
+          typeof chrome !== "undefined" &&
+          chrome.storage &&
+          chrome.storage.local
+        ) {
+          await new Promise((resolve) => {
+            chrome.storage.local.set({ environment: env }, resolve);
+          });
+        }
+        console.log("[EnvironmentConfig] Environment explicitly set to", env);
       } catch (error) {
         console.warn("Could not save environment to storage:", error);
       }
@@ -107,9 +108,15 @@ class EnvironmentConfig {
   // Method to override baseURL manually (for testing)
   async setCustomBaseURL(url) {
     try {
-      await new Promise((resolve) => {
-        chrome.storage.sync.set({ customBaseURL: url }, resolve);
-      });
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.local
+      ) {
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ customBaseURL: url }, resolve);
+        });
+      }
 
       // Update current config
       this.environments[this.currentEnvironment].apiBaseURL = url;
@@ -120,9 +127,16 @@ class EnvironmentConfig {
 
   async getCustomBaseURL() {
     try {
-      const result = await new Promise((resolve) => {
-        chrome.storage.sync.get(["customBaseURL"], resolve);
-      });
+      let result = {};
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.local
+      ) {
+        result = await new Promise((resolve) => {
+          chrome.storage.local.get(["customBaseURL"], resolve);
+        });
+      }
       return result.customBaseURL;
     } catch (error) {
       return null;
@@ -140,14 +154,44 @@ class EnvironmentConfig {
   getSupabaseAnonKey() {
     return this.getSupabaseConfig().anonKey;
   }
+
+  // API Status utilities
+  async getApiStatus() {
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      try {
+        const result = await new Promise((resolve) => {
+          chrome.storage.local.get(["humanreplies_api_status"], resolve);
+        });
+
+        if (result.humanreplies_api_status) {
+          const status = result.humanreplies_api_status;
+          const isRecent = Date.now() - status.lastChecked < 60000; // 1 minute
+          return {
+            isOnline: status.isOnline,
+            lastChecked: status.lastChecked,
+            isRecent: isRecent,
+          };
+        }
+      } catch (error) {
+        console.warn("Could not load API status:", error);
+      }
+    }
+    return { isOnline: false, lastChecked: 0, isRecent: false };
+  }
+
+  async isApiOnline() {
+    const status = await this.getApiStatus();
+    return status.isRecent ? status.isOnline : false;
+  }
 }
 
 // Create singleton instance
 const environmentConfig = new EnvironmentConfig();
 
-// Export for use in other modules
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = environmentConfig;
-} else {
+// Make available globally for non-module scripts (popup, etc.)
+if (typeof window !== "undefined") {
   window.EnvironmentConfig = environmentConfig;
 }
+
+// ES module export
+export default environmentConfig;

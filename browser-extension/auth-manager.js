@@ -308,3 +308,6 @@ class AuthManager {
 
 // Make it globally available
 window.AuthManager = AuthManager;
+
+// ES module export
+export default AuthManager;

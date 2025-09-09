@@ -117,8 +117,8 @@ class XIntegration {
       subtree: true,
     });
   }
-  constructor() {
-    this.apiService = new HumanRepliesAPI();
+  constructor(apiService = null) {
+    this.apiService = apiService || new HumanRepliesAPI();
     this.debugMode = true; // Enable debugging
     this.addedButtons = new Set(); // Track added buttons to prevent duplicates
     this.availableTones = null; // Cache for available tones
@@ -205,76 +205,93 @@ class XIntegration {
     this.log("Loading available tones...");
 
     try {
-      // Ensure API service is properly initialized
-      if (!this.apiService.baseURL) {
-        this.log("API service not initialized, initializing now...");
-        await this.apiService.initializeConfig();
+      // First try to get from background script cache
+      if (typeof chrome !== "undefined" && chrome.runtime) {
+        try {
+          const bgResult = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: "getTones" }, (response) => {
+              if (chrome.runtime.lastError) {
+                resolve({ success: false });
+              } else {
+                resolve(response || { success: false });
+              }
+            });
+          });
+
+          if (bgResult.success && bgResult.tones) {
+            this.availableTones = bgResult.tones;
+            this.log(
+              `Loaded ${this.availableTones.length} tones from background cache`
+            );
+            return;
+          }
+        } catch (e) {
+          this.log(`Background cache failed: ${e.message}`);
+        }
       }
 
-      // First try to get from localStorage cache
-      const cachedTones = localStorage.getItem("humanreplies_tones");
-      const cacheTimestamp = localStorage.getItem(
-        "humanreplies_tones_timestamp"
-      );
-      const cacheAge = Date.now() - (parseInt(cacheTimestamp) || 0);
+      // Fallback: read from chrome local storage (no API calls)
+      const result = await new Promise((resolve) => {
+        if (typeof chrome === "undefined" || !chrome.storage) {
+          resolve({});
+          return;
+        }
+        chrome.storage.local.get(["humanreplies_tones"], resolve);
+      });
 
-      // Use cache if it's less than 5 minutes old
-      if (cachedTones && cacheAge < 5 * 60 * 1000) {
-        this.availableTones = JSON.parse(cachedTones);
-        this.log(`Loaded ${this.availableTones.length} tones from cache`);
+      const cached = result.humanreplies_tones;
+      if (cached && Array.isArray(cached)) {
+        this.availableTones = cached;
+        this.log(
+          `Loaded ${this.availableTones.length} tones from chrome storage`
+        );
         return;
       }
 
-      // Fetch fresh tones from API
-      this.log("Fetching tones from API...");
-      this.log(`API Base URL: ${this.apiService.baseURL}`);
-      const tones = await this.apiService.getTones();
-      this.availableTones = tones;
-
-      // Cache the tones
-      localStorage.setItem("humanreplies_tones", JSON.stringify(tones));
-      localStorage.setItem(
-        "humanreplies_tones_timestamp",
-        Date.now().toString()
-      );
-
-      this.log(`Loaded ${tones.length} tones from API and cached them`);
+      this.log("No tones found in chrome storage, using fallback");
     } catch (error) {
-      this.log(`Failed to load tones: ${error.message}`);
+      this.log(`Failed to load tones from storage: ${error.message}`);
       console.error("Tone loading error:", error);
-
-      // Use fallback tones if API fails
-      this.availableTones = [
-        { name: "neutral", display_name: "👍 Neutral", is_preset: true },
-        { name: "joke", display_name: "😂 Joke", is_preset: true },
-        { name: "support", display_name: "❤️ Support", is_preset: true },
-        { name: "idea", display_name: "💡 Idea", is_preset: true },
-        { name: "question", display_name: "❓ Question", is_preset: true },
-        { name: "confident", display_name: "💪 Confident", is_preset: true },
-      ];
-      this.log(`Using fallback tones: ${this.availableTones.length} tones`);
     }
+
+    // Use fallback tones if storage is empty or fails
+    this.availableTones = [
+      { name: "neutral", display_name: "👍 Neutral", is_preset: true },
+      { name: "joke", display_name: "😂 Joke", is_preset: true },
+      { name: "support", display_name: "❤️ Support", is_preset: true },
+      { name: "idea", display_name: "💡 Idea", is_preset: true },
+      { name: "question", display_name: "❓ Question", is_preset: true },
+      { name: "confident", display_name: "💪 Confident", is_preset: true },
+    ];
+    this.log(`Using fallback tones: ${this.availableTones.length} tones`);
   }
 
   async refreshTones() {
-    this.log("Refreshing tones from API...");
+    this.log("Refreshing tones from chrome storage...");
 
     try {
-      // Clear cache and fetch fresh tones
-      localStorage.removeItem("humanreplies_tones");
-      localStorage.removeItem("humanreplies_tones_timestamp");
+      // Read fresh tones from chrome storage (populated by popup)
+      const result = await new Promise((resolve) => {
+        if (typeof chrome === "undefined" || !chrome.storage) {
+          resolve({});
+          return;
+        }
+        chrome.storage.local.get(["humanreplies_tones"], resolve);
+      });
 
-      const tones = await this.apiService.getTones();
-      this.availableTones = tones;
-
-      // Update cache
-      localStorage.setItem("humanreplies_tones", JSON.stringify(tones));
-      localStorage.setItem(
-        "humanreplies_tones_timestamp",
-        Date.now().toString()
-      );
-
-      this.log(`Refreshed ${tones.length} tones from API`);
+      const cached = result.humanreplies_tones;
+      if (cached && Array.isArray(cached)) {
+        this.availableTones = cached;
+        this.log(
+          `Refreshed ${this.availableTones.length} tones from chrome storage`
+        );
+      } else {
+        this.log("No tones found in chrome storage during refresh");
+        // Keep current tones or use fallback
+        if (!this.availableTones || this.availableTones.length === 0) {
+          await this.loadAvailableTones();
+        }
+      }
     } catch (error) {
       this.log(`Failed to refresh tones: ${error.message}`);
     }
@@ -2231,11 +2248,13 @@ class XIntegration {
   }
 }
 
-// Initialize when page loads
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    new XIntegration();
-  });
-} else {
-  new XIntegration();
+// Export initialization function
+export function initXIntegration(apiService = null) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      new XIntegration(apiService);
+    });
+  } else {
+    new XIntegration(apiService);
+  }
 }

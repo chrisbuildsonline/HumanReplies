@@ -54,7 +54,9 @@ class SupabaseClient {
           const runtimeListener = (msg) => {
             if (msg && msg.action === "authResult" && !authCompleted) {
               authCompleted = true;
-              try { chrome.windows.remove(windowId); } catch(e) {}
+              try {
+                chrome.windows.remove(windowId);
+              } catch (e) {}
               chrome.runtime.onMessage.removeListener(runtimeListener);
               if (msg.success && msg.data && msg.data.access_token) {
                 resolve(msg.data);
@@ -221,3 +223,6 @@ if (typeof module !== "undefined" && module.exports) {
 } else {
   window.SupabaseClient = SupabaseClient;
 }
+
+// ES module export
+export default SupabaseClient;
