@@ -72,15 +72,6 @@ export function initLinkedInIntegration(apiService) {
         );
       }
 
-      // Fallback preset tones
-      availableTones = [
-        { name: "neutral", display_name: "👍 Neutral", is_preset: true },
-        { name: "joke", display_name: "😂 Joke", is_preset: true },
-        { name: "support", display_name: "❤️ Support", is_preset: true },
-        { name: "idea", display_name: "💡 Idea", is_preset: true },
-        { name: "question", display_name: "❓ Question", is_preset: true },
-        { name: "confident", display_name: "💪 Confident", is_preset: true },
-      ];
       return availableTones;
     })();
 

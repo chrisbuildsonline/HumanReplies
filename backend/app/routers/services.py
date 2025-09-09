@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.models import ExternalServiceUrl, ServiceUrlsResponse, ExternalServiceUrlResponse, GenerateReplyRequest, GenerateReplyResponse
+from app.models import ExternalServiceUrl, ServiceUrlsResponse, ExternalServiceUrlResponse, GenerateReplyRequest, GenerateReplyResponse, Reply, User, Tone
 from app.database import get_db
 from app.auth import get_current_user, get_optional_user
 from typing import Dict, Any, Optional
@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import httpx
 import asyncio
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,87 @@ router = APIRouter(prefix="/services", tags=["External Services"])
 
 # Cache duration for URLs (1 hour as requested)
 CACHE_DURATION_HOURS = 1
+
+async def get_or_create_user(db: AsyncSession, supabase_user: Dict[str, Any]) -> User:
+    """Get existing user or create new one"""
+    # Check if user exists
+    result = await db.execute(
+        select(User).where(User.supabase_user_id == supabase_user["id"])
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # Create new user
+        user = User(
+            supabase_user_id=supabase_user["id"],
+            email=supabase_user["email"], 
+            full_name=supabase_user.get("user_metadata", {}).get("full_name"),
+            avatar_url=supabase_user.get("user_metadata", {}).get("avatar_url")
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    
+    return user
+
+async def determine_tone_type(db: AsyncSession, tone_name: str, user_id: Optional[str] = None) -> str:
+    """Determine if a tone is a preset or custom tone"""
+    if not tone_name:
+        return "unknown"
+    
+    # Check if it's a system preset
+    result = await db.execute(
+        select(Tone).where(and_(Tone.name == tone_name, Tone.is_preset == True))
+    )
+    preset_tone = result.scalar_one_or_none()
+    
+    if preset_tone:
+        return tone_name  # Return the preset tone name
+    
+    # If user is provided, check if it's their custom tone
+    if user_id:
+        try:
+            # Convert string to UUID if needed
+            if isinstance(user_id, str):
+                user_uuid = uuid.UUID(user_id)
+            else:
+                user_uuid = user_id
+                
+            result = await db.execute(
+                select(Tone).where(and_(
+                    Tone.name == tone_name, 
+                    Tone.is_preset == False,
+                    Tone.user_id == user_uuid
+                ))
+            )
+            custom_tone = result.scalar_one_or_none()
+            
+            if custom_tone:
+                return "custom"  # It's a user's custom tone
+        except Exception:
+            pass
+    
+    # If we can't find it, it might be a preset tone name that we just don't have in DB yet
+    # Common preset tone names
+    preset_names = ["helpful", "friendly", "professional", "casual", "encouraging", "humorous", "informative", "neutral"]
+    if tone_name.lower() in preset_names:
+        return tone_name.lower()
+    
+    return "unknown"
+
+async def log_reply_usage(db: AsyncSession, platform: str, tone_type: str, user: Optional[User] = None):
+    """Log reply usage for analytics"""
+    try:
+        reply = Reply(
+            user_id=user.id if user else None,
+            service_type=platform,
+            tone_type=tone_type
+        )
+        db.add(reply)
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log reply usage: {e}")
+        # Don't fail the main request if logging fails
 
 async def get_or_update_service_url(db: AsyncSession, service_name: str, default_url: str) -> ExternalServiceUrl:
     """Get service URL from database or create/update if needed"""
@@ -196,12 +278,27 @@ async def generate_reply(
                 detail="AI service is currently unavailable"
             )
         
+        # Get user if authenticated
+        user = None
+        if current_user:
+            user = await get_or_create_user(db, current_user)
+        
+        # Determine tone type
+        tone_type = await determine_tone_type(
+            db, 
+            request.tone, 
+            str(user.id) if user else None
+        )
+        
         # Build prompt but don't generate response (client will do that)
         prompt = build_prompt(request.context, {
             "tone": request.tone,
             "platform": request.platform,
             "length": request.length
         })
+        
+        # Log reply usage for analytics
+        await log_reply_usage(db, request.platform, tone_type, user)
         
         # Return just the prompt, let client handle the actual generation
         return GenerateReplyResponse(

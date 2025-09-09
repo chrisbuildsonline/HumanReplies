@@ -57,7 +57,8 @@ async def log_reply_usage(
         # Create minimal analytics record - NO SENSITIVE DATA
         reply = Reply(
             user_id=user_id,  # NULL if not logged in
-            service_type=reply_data.service_type  # Just the platform key
+            service_type=reply_data.service_type,  # Just the platform key
+            tone_type=reply_data.tone_type  # The tone used for the reply
             # NO original_post, generated_reply, post_url, or metadata stored!
         )
         
@@ -69,6 +70,7 @@ async def log_reply_usage(
             id=str(reply.id),
             user_id=str(reply.user_id) if reply.user_id else None,
             service_type=reply.service_type,
+            tone_type=reply.tone_type,
             created_at=reply.created_at
         )
         
@@ -106,6 +108,7 @@ async def get_user_reply_analytics(
                 id=str(reply.id),
                 user_id=str(reply.user_id),
                 service_type=reply.service_type,
+                tone_type=reply.tone_type,
                 created_at=reply.created_at
             )
             for reply in replies
@@ -248,6 +251,7 @@ async def get_recent_activity(
                 id=str(reply.id),
                 user_id=str(reply.user_id),
                 service_type=reply.service_type,
+                tone_type=reply.tone_type,
                 created_at=reply.created_at
             )
             for reply in replies

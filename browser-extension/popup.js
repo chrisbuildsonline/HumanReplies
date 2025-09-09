@@ -83,34 +83,34 @@ class PopupManager {
     try {
       addVisibleDebug("Before HumanRepliesAPI created");
 
-    // Get environment config and initialize API service
-    const envConfig = window.EnvironmentConfig;
-    addVisibleDebug("EnvironmentConfig check:", {
-      exists: !!envConfig,
-      type: typeof envConfig,
-      constructor: envConfig?.constructor?.name
-    });
-    
-    if (envConfig) {
-      await envConfig.loadEnvironment();
-      const config = envConfig.getConfig();
-      addVisibleDebug("Environment config loaded:", {
-        environment: envConfig.getCurrentEnvironment(),
-        apiBaseURL: config.apiBaseURL,
-        debug: config.debug,
+      // Get environment config and initialize API service
+      const envConfig = window.EnvironmentConfig;
+      addVisibleDebug("EnvironmentConfig check:", {
+        exists: !!envConfig,
+        type: typeof envConfig,
+        constructor: envConfig?.constructor?.name,
       });
 
-      this.api = new HumanRepliesAPI(envConfig);
-      addVisibleDebug(
-        "After HumanRepliesAPI created with environment config"
-      );
-    } else {
-      addVisibleDebug("WARNING: No EnvironmentConfig found, using fallback");
-      this.api = new HumanRepliesAPI();
-      addVisibleDebug(
-        "After HumanRepliesAPI created without environment config"
-      );
-    }      // Log final API configuration
+      if (envConfig) {
+        await envConfig.loadEnvironment();
+        const config = envConfig.getConfig();
+        addVisibleDebug("Environment config loaded:", {
+          environment: envConfig.getCurrentEnvironment(),
+          apiBaseURL: config.apiBaseURL,
+          debug: config.debug,
+        });
+
+        this.api = new HumanRepliesAPI(envConfig);
+        addVisibleDebug(
+          "After HumanRepliesAPI created with environment config"
+        );
+      } else {
+        addVisibleDebug("WARNING: No EnvironmentConfig found, using fallback");
+        this.api = new HumanRepliesAPI();
+        addVisibleDebug(
+          "After HumanRepliesAPI created without environment config"
+        );
+      } // Log final API configuration
       if (this.api) {
         addVisibleDebug("Final API config:", {
           baseURL: this.api.getBaseURL(),
@@ -531,11 +531,16 @@ class PopupManager {
   }
 
   updateExtensionStatus() {
-    const statusElement = document.getElementById("statusText");
-    const statusIndicator = document.getElementById("statusIndicator");
-    const statusContainer = document.getElementById("extensionStatus");
+    // Get all status elements using classes
+    const statusTextElements = document.querySelectorAll(".status-text");
+    const statusIndicators = document.querySelectorAll(".status-indicator");
+    const statusContainers = document.querySelectorAll(".extensionStatus");
 
-    if (!statusElement || !statusIndicator || !statusContainer) {
+    if (
+      !statusTextElements.length ||
+      !statusIndicators.length ||
+      !statusContainers.length
+    ) {
       return; // Elements not ready yet
     }
 
@@ -544,98 +549,118 @@ class PopupManager {
 
     // Priority: API status first, then site support
     if (this.apiStatusChecked && !this.isApiOnline) {
-      statusText = "HumanReplies API offline";
+      statusText = "HumanReplies API is offline";
       isActive = false;
     }
 
-    // Clear existing content and create elements
-    statusElement.innerHTML = "";
+    // Update all status text elements
+    statusTextElements.forEach((statusElement) => {
+      // Clear existing content and create elements
+      statusElement.innerHTML = "";
 
-    // Add the status text
-    const textSpan = document.createElement("span");
-    textSpan.textContent = statusText;
-    statusElement.appendChild(textSpan);
+      // Add the status text
+      const textSpan = document.createElement("span");
+      textSpan.textContent = statusText;
+      statusElement.appendChild(textSpan);
 
-    statusContainer.style.display = "flex";
+      // Add refresh button for offline API status
+      if (!this.isApiOnline) {
+        const refreshButton = document.createElement("button");
+        refreshButton.innerHTML = "🔄";
+        refreshButton.title = "Retry API connection";
+        refreshButton.style.cssText = `
+          background: none;
+          border: none;
+          color: inherit;
+          margin-left: 8px;
+          cursor: pointer;
+          font-size: 12px;
+          padding: 2px 4px;
+          border-radius: 3px;
+          transition: background-color 0.2s;
+        `;
 
-    // Add refresh button for offline API status
-    if (!this.isApiOnline) {
-      const refreshButton = document.createElement("button");
-      refreshButton.innerHTML = "🔄";
-      refreshButton.title = "Retry API connection";
-      refreshButton.style.cssText = `
-        background: none;
-        border: none;
-        color: inherit;
-        margin-left: 8px;
-        cursor: pointer;
-        font-size: 12px;
-        padding: 2px 4px;
-        border-radius: 3px;
-        transition: background-color 0.2s;
-      `;
+        // Add hover effect
+        refreshButton.addEventListener("mouseenter", () => {
+          refreshButton.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+        });
+        refreshButton.addEventListener("mouseleave", () => {
+          refreshButton.style.backgroundColor = "transparent";
+        });
 
-      // Add hover effect
-      refreshButton.addEventListener("mouseenter", () => {
-        refreshButton.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
-      });
-      refreshButton.addEventListener("mouseleave", () => {
-        refreshButton.style.backgroundColor = "transparent";
-      });
+        // Add click handler to retry API connection
+        refreshButton.addEventListener("click", async (e) => {
+          e.stopPropagation();
 
-      // Add click handler to retry API connection
-      refreshButton.addEventListener("click", async (e) => {
-        e.stopPropagation();
+          // Show loading state
+          refreshButton.innerHTML = "⏳";
+          refreshButton.disabled = true;
 
-        // Show loading state
-        refreshButton.innerHTML = "⏳";
-        refreshButton.disabled = true;
+          addVisibleDebug("[Manual Refresh] Retrying API connection...");
 
-        addVisibleDebug("[Manual Refresh] Retrying API connection...");
+          try {
+            // Force immediate API status check with manual refresh flag
+            await this.checkApiStatus(true);
 
-        try {
-          // Force immediate API status check with manual refresh flag
-          await this.checkApiStatus(true);
-
-          if (this.isApiOnline) {
-            addVisibleDebug("[Manual Refresh] API is now online!");
-            this.showSuccess("API connection restored!");
-          } else {
-            addVisibleDebug("[Manual Refresh] API still offline");
-            this.showError("API still offline. Please try again later.");
+            if (this.isApiOnline) {
+              addVisibleDebug("[Manual Refresh] API is now online!");
+              this.showSuccess("API connection restored!");
+            } else {
+              addVisibleDebug("[Manual Refresh] API still offline");
+              this.showError("API still offline. Please try again later.");
+            }
+          } catch (error) {
+            addVisibleDebug("[Manual Refresh] Retry failed:", error.message);
+            this.showError("Failed to check API status");
+          } finally {
+            // Reset button after a short delay
+            setTimeout(() => {
+              refreshButton.innerHTML = "🔄";
+              refreshButton.disabled = false;
+            }, 1000);
           }
-        } catch (error) {
-          addVisibleDebug("[Manual Refresh] Retry failed:", error.message);
-          this.showError("Failed to check API status");
-        } finally {
-          // Reset button after a short delay
-          setTimeout(() => {
-            refreshButton.innerHTML = "🔄";
-            refreshButton.disabled = false;
-          }, 1000);
-        }
-      });
+        });
 
-      statusElement.appendChild(refreshButton);
-    } else {
-      // Remove the element
-      statusContainer.style.display = "none";
-    }
+        statusElement.appendChild(refreshButton);
+      }
+    });
 
+    // Show/hide status containers based on API status
+    statusContainers.forEach((container) => {
+      if (!this.isApiOnline) {
+        container.style.display = "flex";
+      } else {
+        container.style.display = "none";
+      }
+    });
+
+    // Apply styling based on active state
     if (isActive) {
-      statusContainer.classList.remove("logged-out");
-      statusContainer.classList.add("logged-in");
-      statusElement.classList.remove("logged-out");
-      statusElement.classList.add("logged-in");
-      statusIndicator.classList.remove("logged-out");
-      statusIndicator.classList.add("logged-in");
+      statusContainers.forEach((container) => {
+        container.classList.remove("logged-out");
+        container.classList.add("logged-in");
+      });
+      statusTextElements.forEach((element) => {
+        element.classList.remove("logged-out");
+        element.classList.add("logged-in");
+      });
+      statusIndicators.forEach((indicator) => {
+        indicator.classList.remove("logged-out");
+        indicator.classList.add("logged-in");
+      });
     } else {
-      statusContainer.classList.remove("logged-in");
-      statusContainer.classList.add("logged-out");
-      statusElement.classList.remove("logged-in");
-      statusElement.classList.add("logged-out");
-      statusIndicator.classList.remove("logged-in");
-      statusIndicator.classList.add("logged-out");
+      statusContainers.forEach((container) => {
+        container.classList.remove("logged-in");
+        container.classList.add("logged-out");
+      });
+      statusTextElements.forEach((element) => {
+        element.classList.remove("logged-in");
+        element.classList.add("logged-out");
+      });
+      statusIndicators.forEach((indicator) => {
+        indicator.classList.remove("logged-in");
+        indicator.classList.add("logged-out");
+      });
     }
   }
 
@@ -1547,32 +1572,6 @@ document.addEventListener("DOMContentLoaded", function () {
     loggedOut: !!loggedOutSelect,
     loggedIn: !!loggedInSelect,
   });
-
-  // Delegated fallback
-  document.body.addEventListener(
-    "click",
-    (e) => {
-      const id = e.target && e.target.id;
-      if (!id) return;
-      if (id === "loginButton" && window.popupManager) {
-        appendDebug("Delegated click: loginButton");
-        window.popupManager.handleLogin();
-      }
-      if (id === "debugRefreshButton" && window.popupManager) {
-        appendDebug("Delegated click: debugRefreshButton");
-        window.popupManager.refreshAuthState();
-      }
-      if (id === "dashboardButton" && window.popupManager) {
-        appendDebug("Delegated click: dashboardButton");
-        window.popupManager.openDashboard();
-      }
-      if (id === "logoutButton" && window.popupManager) {
-        appendDebug("Delegated click: logoutButton");
-        window.popupManager.handleLogout();
-      }
-    },
-    true
-  );
 });
 
 // Also log when the script is fully parsed

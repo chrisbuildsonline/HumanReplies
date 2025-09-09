@@ -61,11 +61,13 @@ class AuthResponse(BaseResponse):
 # Reply Models - Privacy-First Analytics Only
 class ReplyCreate(BaseModel):
     service_type: str = Field(..., description="Social media platform key (e.g., 'x', 'facebook', 'linkedin')")
+    tone_type: Optional[str] = Field(None, description="Tone used for the reply")
 
 class ReplyResponse(BaseModel):
     id: str
     user_id: Optional[str] = None  # Only included if user was logged in
     service_type: str
+    tone_type: Optional[str] = None  # Tone used for the reply
     created_at: datetime
 
 class DashboardStats(BaseModel):
@@ -125,6 +127,23 @@ class ToneCreateRequest(BaseModel):
 class TonesListResponse(BaseModel):
     tones: List[ToneResponse]
 
+# User Settings Models
+class UserSettingsResponse(BaseModel):
+    id: str
+    user_id: str
+    writing_style: Optional[str] = None
+    guardian_text: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class UserSettingsCreateRequest(BaseModel):
+    writing_style: Optional[str] = Field(None, description="Instructions on writing style")
+    guardian_text: Optional[str] = Field(None, description="Instructions on what NOT to add")
+
+class UserSettingsUpdateRequest(BaseModel):
+    writing_style: Optional[str] = Field(None, description="Instructions on writing style")
+    guardian_text: Optional[str] = Field(None, description="Instructions on what NOT to add")
+
 # SQLAlchemy Models (Database)
 class User(Base):
     __tablename__ = "users"
@@ -141,6 +160,8 @@ class User(Base):
     
     # Relationships
     replies = relationship("Reply", back_populates="user", cascade="all, delete-orphan")
+    user_settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    custom_tones = relationship("Tone", back_populates="user", cascade="all, delete-orphan")
 
 class Reply(Base):
     __tablename__ = "replies"
@@ -148,6 +169,7 @@ class Reply(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)  # NULL if user not logged in
     service_type = Column(String, nullable=False, index=True)  # e.g., "x", "facebook", "linkedin"
+    tone_type = Column(String, nullable=True, index=True)  # The tone used: preset name or "custom" for user tones
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
     # Relationships
@@ -181,4 +203,17 @@ class Tone(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", backref="custom_tones")
+    user = relationship("User", back_populates="custom_tones")
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    writing_style = Column(Text, nullable=True)  # Instructions on writing style
+    guardian_text = Column(Text, nullable=True)  # Instructions on what NOT to add
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="user_settings")

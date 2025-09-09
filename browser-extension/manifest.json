@@ -12,6 +12,7 @@
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
+    "https://www.linkedin.com/*",
     "http://localhost:8000/*",
     "http://localhost:8005/*",
     "https://api.humanreplies.com/*",
@@ -43,8 +44,7 @@
       ],
       "css": [
         "styles.css"
-      ],
-      "type": "module"
+      ]
     }
   ],
   "icons": {

@@ -73,8 +73,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px;
-      background: #fff;
+      padding: 10px 14px;
       border-radius: 10px;
       margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -440,6 +439,12 @@
       transform: translateY(-1px);
       box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
     }
+
+    .wrap-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
   </style>
 </head>
 
@@ -451,8 +456,10 @@
 
   <div id="site-not-supported-view" class="hidden">
     <div class="status logged-out">
-      <span class="status-text logged-out">This website is not supported</span>
-      <div class="status-indicator logged-out"></div>
+      <div class="wrap-status">
+        <span class="status-text logged-out">This website is not supported</span>
+        <div class="status-indicator logged-out"></div>
+      </div>
     </div>
   </div>
 
@@ -460,9 +467,9 @@
   <div id="supported-site-view">
     <!-- User logged out state -->
     <div id="loggedOutState">
-      <div class="status logged-in" id="extensionStatus">
-        <span class="status-text logged-in" id="statusText">Extension Active</span>
+      <div class="status logged-in extensionStatus" id="extensionStatus">
         <div class="status-indicator logged-in" id="statusIndicator"></div>
+        <div class="status-text" id="statusText"></div>
       </div>
 
       <div class="login-section">
@@ -503,9 +510,11 @@
 
     <!-- User logged in state -->
     <div id="loggedInState" class="hidden">
-      <div class="status logged-in" id="extensionStatusLoggedIn">
-        <span class="status-text logged-in" id="statusTextLoggedIn">Extension Active</span>
-        <div class="status-indicator logged-in" id="statusIndicatorLoggedIn"></div>
+      <div class="status logged-in extensionStatus" id="extensionStatusLoggedIn">
+        <div class="wrap-status">
+          <div class="status-indicator logged-in" id="statusIndicatorLoggedIn"></div>
+          <div class="status-text" id="statusTextLoggedIn"></div>
+        </div>
       </div>
 
       <div class="user-info">
@@ -541,16 +550,6 @@
 
     <div class="footer">
       <p>Version 1.0.0</p>
-      <div style="margin-top: 10px;">
-        <button onclick="window.debugStorage && window.debugStorage()"
-          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Debug Storage</button>
-        <button onclick="window.clearTonesCache && window.clearTonesCache()"
-          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Clear Cache</button>
-        <button onclick="window.popupManager && window.popupManager.loadAvailableTones()"
-          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Reload Tones</button>
-        <button onclick="window.testApiCall && window.testApiCall()"
-          style="font-size: 10px; padding: 4px 8px; margin: 2px;">Test API</button>
-      </div>
     </div>
   </div>
 

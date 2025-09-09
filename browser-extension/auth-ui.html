@@ -1,31 +1,148 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8" />
   <title>HumanReplies Auth</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https: data:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; connect-src https: data:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
   <style>
-    body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; margin:0; background:#f6f1e8; }
-    .container { max-width:360px; margin:32px auto; background:#fff; padding:32px 28px; border-radius:16px; box-shadow:0 4px 18px rgba(0,0,0,0.08); }
-    h1 { font-size:22px; margin:0 0 24px; text-align:center; }
-    label { font-size:13px; font-weight:600; display:block; margin:0 0 6px; }
-    input { width:100%; padding:11px 12px; border:2px solid #dcd7ce; border-radius:10px; font-size:14px; box-sizing:border-box; }
-    input:focus { outline:none; border-color:#2c3e50; }
-    button.primary { width:100%; background:#2c3e50; color:#fff; font-weight:600; font-size:15px; padding:12px; border:none; border-radius:10px; cursor:pointer; margin-top:6px; }
-    button.primary:hover { background:#34495e; }
-    button.linkish { width:100%; background:none; border:none; color:#2c3e50; text-decoration:underline; cursor:pointer; font-size:13px; margin-top:4px; }
-    .row { margin-bottom:18px; }
-    .msg { margin-top:14px; font-size:13px; padding:12px; border-radius:10px; display:none; line-height:1.3; }
-    .msg.error { background:#fdf2f2; border:2px solid #e74c3c; color:#c0392b; display:block; }
-    .msg.success { background:#f0f9f0; border:2px solid #27ae60; color:#1e874b; display:block; }
-    .loading { display:none; margin-top:10px; text-align:center; font-size:12px; color:#555; }
-    .spinner { width:18px; height:18px; border:3px solid #eee; border-top:3px solid #2c3e50; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 6px; }
-    @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: #f6f1e8;
+    }
+
+    .container {
+      max-width: 360px;
+      margin: 32px;
+      background: #fff;
+      padding: 32px 28px;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0 0 24px;
+      text-align: center;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      display: block;
+      margin: 0 0 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 2px solid #dcd7ce;
+      border-radius: 10px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #2c3e50;
+    }
+
+    button.primary {
+      width: 100%;
+      background: #2c3e50;
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button.primary:hover {
+      background: #34495e;
+    }
+
+    button.linkish {
+      width: 100%;
+      background: none;
+      border: none;
+      color: #2c3e50;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .row {
+      margin-bottom: 18px;
+    }
+
+    .msg {
+      margin-top: 14px;
+      font-size: 13px;
+      padding: 12px;
+      border-radius: 10px;
+      display: none;
+      line-height: 1.3;
+    }
+
+    .msg.error {
+      background: #fdf2f2;
+      border: 2px solid #e74c3c;
+      color: #c0392b;
+      display: block;
+    }
+
+    .msg.success {
+      background: #f0f9f0;
+      border: 2px solid #27ae60;
+      color: #1e874b;
+      display: block;
+    }
+
+    .loading {
+      display: none;
+      margin-top: 10px;
+      text-align: center;
+      font-size: 12px;
+      color: #555;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid #eee;
+      border-top: 3px solid #2c3e50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 6px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
   </style>
 </head>
+
 <body>
   <div class="container">
-    <h1 id="title">Sign In</h1>
+    <h1 id="title">Sign In to HumanReplies</h1>
     <form id="authForm">
       <div class="row">
         <label for="email">Email</label>
@@ -35,13 +152,19 @@
         <label for="password">Password</label>
         <input type="password" id="password" autocomplete="current-password" required />
       </div>
-      <button type="submit" class="primary" id="submitBtn">Sign In</button>
-      <button type="button" class="linkish" id="switchBtn">Need an account? Sign Up</button>
-      <button type="button" class="linkish" id="cancelBtn">Cancel</button>
-      <div class="loading" id="loading"><div class="spinner"></div><div>Authenticating…</div></div>
+      <div class="button-group">
+        <button type="submit" class="primary" id="submitBtn">Sign In</button>
+        <button type="button" class="linkish" id="switchBtn">Need an account? Sign Up</button>
+        <button type="button" class="linkish" id="cancelBtn">Cancel</button>
+      </div>
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div>Authenticating…</div>
+      </div>
       <div class="msg" id="messageBox"></div>
     </form>
   </div>
   <script src="auth-ui.js"></script>
 </body>
+
 </html>

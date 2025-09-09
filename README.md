@@ -866,3 +866,9 @@ For questions, issues, or feature requests:
 ---
 
 **Built with ❤️ for better social media interactions**
+
+### Pollinations API
+
+This project relies on the **Pollinations API** for generating AI-powered replies. The Pollinations API provides advanced AI capabilities that enable contextual and dynamic reply generation. We are grateful for their contribution to this project.
+
+For more information about the Pollinations API, visit their [official website](https://pollinations.ai/).
