@@ -17,7 +17,6 @@
     .header {
       text-align: center;
       margin-bottom: 24px;
-      padding: 16px 0;
     }
 
     .title {
@@ -221,6 +220,10 @@
       margin-top: 20px;
       padding-top: 16px;
       border-top: 1px solid #e8e5e1;
+    }
+
+    .mt-20 {
+      margin-top: 20px;
     }
 
     .setting-item {
@@ -445,6 +448,74 @@
       align-items: center;
       gap: 8px;
     }
+
+    .dashboard {
+      margin-top: -20px;
+    }
+
+    /* Toggle switch styles */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #d0d7dd;
+      transition: .25s;
+      border-radius: 34px;
+      box-shadow: inset 0 0 0 1px #b0b8bf;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 2px;
+      top: 2px;
+      background-color: #ffffff;
+      transition: .25s;
+      border-radius: 50%;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    }
+
+    .toggle-switch input:checked+.toggle-slider {
+      background: linear-gradient(135deg, #2c3e50, #1d9bf0);
+      box-shadow: inset 0 0 0 1px #1d9bf0;
+    }
+
+    .toggle-switch input:checked+.toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    .toggle-status {
+      font-size: 11px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-left: 8px;
+      min-width: 24px;
+      text-align: left;
+    }
+
+    .setting-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
   </style>
 </head>
 
@@ -486,6 +557,17 @@
           <select id="replyToneSelectLoggedOut" class="setting-select">
             <option value="ask">Always ask me</option>
           </select>
+          <div class="setting mt-20">
+            <div class="setting-label">Enable everywhere</div>
+            <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com, facebook.com. Enable this to work on all websites.</div>
+            <div class="setting-toggle-row">
+              <label class="toggle-switch" aria-label="Enable everywhere">
+                <input type="checkbox" class="enable-everywhere-toggle" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-status enable-everywhere-status">Off</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -517,6 +599,7 @@
         </div>
       </div>
 
+
       <div class="user-info">
         <div class="user-avatar" id="userAvatar">U</div>
         <div class="user-details">
@@ -526,9 +609,15 @@
         <button class="logout-button" id="logoutButton">Logout</button>
       </div>
 
-      <div class="section">
+      <div class="section dashboard">
+        <button id="dashboardButton" class="dashboard-button">
+          Go to Dashboard
+        </button>
+      </div>
+
+      <div class="section setting-item">
         <div class="section-title">Reply Settings</div>
-        <div class="setting-item">
+        <div class="setting">
           <div class="setting-label">Default Reply Tone</div>
           <div class="setting-description">
             Choose from preset tones or your custom tones
@@ -537,25 +626,42 @@
             <option value="ask">Always ask me</option>
           </select>
         </div>
+        <div class="setting mt-20">
+          <div class="setting-label">Use Own Voice</div>
+          <div class="setting-description">
+            Enable or disable the use of your own voice for replies
+          </div>
+          <div class="setting-toggle-row">
+            <label class="toggle-switch" aria-label="Use Own Voice">
+              <input type="checkbox" class="use-own-voice-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-status use-own-voice-status">On</span>
+          </div>
+        </div>
+
+        <div class="setting mt-20">
+          <div class="setting-label">Enable everywhere</div>
+          <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com, facebook.com. Enable this to work on all websites.</div>
+          <div class="setting-toggle-row">
+            <label class="toggle-switch" aria-label="Enable everywhere">
+              <input type="checkbox" class="enable-everywhere-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-status enable-everywhere-status">Off</span>
+          </div>
+        </div>
       </div>
 
-      <div class="section">
-        <div class="section-title">User settings</div>
-        <p class="subtitle">Go to dashboard to manage account settings and preferences.</p>
-        <button id="dashboardButton" class="dashboard-button">
-          Open Dashboard
-        </button>
+      <div class="footer">
+        <p>Version 1.0.0</p>
       </div>
     </div>
 
-    <div class="footer">
-      <p>Version 1.0.0</p>
-    </div>
-  </div>
 
-
-  <script type="module" src="config/environment.js"></script>
-  <script type="module" src="popup.js"></script>
+    <script type="module" src="config/environment.js"></script>
+    <script type="module" src="popup.js"></script>
+  </div> <!-- end supported-site-view -->
 </body>
 
 </html>

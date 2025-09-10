@@ -26,24 +26,23 @@ export function TopServices({ replies }: TopServicesProps) {
 
   const totalReplies = replies.length;
   const services = [
-    { name: "X", count: serviceCounts["X"] || 0, color: "bg-chart-1" },
     {
-      name: "LinkedIn",
-      count: serviceCounts["LinkedIn"] || 0,
-      color: "bg-chart-2",
+      name: "Text Select",
+      count: serviceCounts["Context"] || 0,
+      color: "bg-chart-1",
     },
     {
-      name: "Facebook",
-      count: serviceCounts["Facebook"] || 0,
-      color: "bg-chart-3",
+      name: "Integrations",
+      count: serviceCounts["Integrations"] || 0,
+      color: "bg-chart-2",
     },
   ].sort((a, b) => b.count - a.count);
 
   return (
     <Card className="bg-card/50 backdrop-blur border-border/50">
       <CardHeader>
-        <CardTitle>Top Services</CardTitle>
-        <CardDescription>Your most used social media platforms</CardDescription>
+        <CardTitle>Most used</CardTitle>
+        <CardDescription>Your most used methods of replying</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {services.map((service, index) => {

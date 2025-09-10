@@ -7,49 +7,9 @@ addVisibleDebug("[Popup] script file loaded");
 addVisibleDebug("[Popup] Starting popup.js execution...");
 
 // Add visible debug info to the page
-function addVisibleDebug(...parts) {
-  try {
-    let debugDiv = document.getElementById("visibleDebug");
-    if (!debugDiv) {
-      debugDiv = document.createElement("div");
-      debugDiv.id = "visibleDebug";
-      debugDiv.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        background: #000;
-        color: #0f0;
-        font-family: monospace;
-        font-size: 10px;
-        padding: 5px;
-        z-index: 9999;
-        max-height: 100px;
-        overflow-y: auto;
-      `;
-      document.body.appendChild(debugDiv);
-    }
-    const time = new Date().toLocaleTimeString();
-    const message = parts
-      .map((p) => {
-        if (p === undefined) return "undefined";
-        if (p === null) return "null";
-        if (typeof p === "object") {
-          try {
-            return JSON.stringify(p);
-          } catch (_) {
-            return "[object]";
-          }
-        }
-        return String(p);
-      })
-      .join(" ");
-    debugDiv.innerHTML += `[${time}] ${message}<br>`;
-    debugDiv.scrollTop = debugDiv.scrollHeight;
-  } catch (e) {
-    // Fallback to title (only first part)
-    document.title = parts[0] ? String(parts[0]) : "(debug error)";
-  }
+function addVisibleDebug(..._parts) {
+  // Logging disabled (stubbed out). Intentionally left blank.
+  return;
 }
 
 function appendDebug(message) {
@@ -72,6 +32,9 @@ class PopupManager {
     this.isApiOnline = false; // Track API status
     this.apiStatusChecked = false; // Track if we've checked API status
     this.isOnSupportedSite = null; // Track if current site is supported (null = not checked yet)
+    this.useIntegrations = true; // default ON
+    this.enableSelectReply = true; // default ON
+    this.enableEverywhere = false; // default OFF (social media only)
 
     // Initialize async
     this.loadApiStatus(); // Load saved status first
@@ -257,23 +220,113 @@ class PopupManager {
         this.updateExtensionStatus(); // Update UI with offline status
         return;
       }
+
+      // Check if we have cached tones first
+      const cachedTones = await this.getCachedTones();
+      if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
+        addVisibleDebug("[EarlyTones] Using cached tones:", cachedTones.tones.length);
+        this.allTones = cachedTones.tones;
+        this.isApiOnline = true;
+        this.apiStatusChecked = true;
+        this.saveApiStatus();
+        this.updateExtensionStatus();
+        return;
+      }
+
       const tones = await this.api.getTones({
         timeoutMs: 2000,
         reason: "early-preload",
       });
       addVisibleDebug("[EarlyTones] Received tones count:", tones.length);
       this.allTones = tones;
+      
+      // Cache the tones
+      await this.cacheTones(tones);
+      
       this.isApiOnline = true;
       this.apiStatusChecked = true;
       this.saveApiStatus();
       this.updateExtensionStatus(); // Update UI with online status
     } catch (err) {
       addVisibleDebug("[EarlyTones] Error fetching tones:", err.message);
+      
+      // Try to use cached tones as fallback
+      const cachedTones = await this.getCachedTones();
+      if (cachedTones) {
+        addVisibleDebug("[EarlyTones] Using cached tones as fallback");
+        this.allTones = cachedTones.tones;
+      }
+      
       this.isApiOnline = false;
       this.apiStatusChecked = true;
       this.saveApiStatus();
       this.updateExtensionStatus(); // Update UI with offline status
     }
+  }
+
+  async getCachedTones() {
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['humanreplies_tones_cache'], resolve);
+      });
+      return result.humanreplies_tones_cache || null;
+    } catch (err) {
+      addVisibleDebug("[Cache] Error getting cached tones:", err.message);
+      return null;
+    }
+  }
+
+  async cacheTones(tones) {
+    try {
+      const cacheData = {
+        tones: tones,
+        cachedAt: Date.now(),
+        isLoggedIn: this.isLoggedIn
+      };
+      
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.set({ humanreplies_tones_cache: cacheData }, () => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+      });
+      
+      addVisibleDebug("[Cache] Tones cached successfully");
+    } catch (err) {
+      addVisibleDebug("[Cache] Error caching tones:", err.message);
+    }
+  }
+
+  shouldRefreshTones(cachedData) {
+    if (!cachedData) return true;
+    
+    const now = Date.now();
+    const cacheAge = now - cachedData.cachedAt;
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    
+    // If user is logged in, always refresh (they might have new custom tones)
+    if (this.isLoggedIn) {
+      addVisibleDebug("[Cache] Logged in user - forcing refresh");
+      return true;
+    }
+    
+    // If cache is older than 24 hours, refresh
+    if (cacheAge > twentyFourHours) {
+      addVisibleDebug("[Cache] Cache expired (24h+) - refreshing");
+      return true;
+    }
+    
+    // If login state changed since cache, refresh  
+    if (cachedData.isLoggedIn !== this.isLoggedIn) {
+      addVisibleDebug("[Cache] Login state changed - refreshing");
+      return true;
+    }
+    
+    addVisibleDebug("[Cache] Using cached tones (age: " + Math.round(cacheAge / 1000 / 60) + " minutes)");
+    return false;
   }
 
   initializeOtherComponents() {
@@ -664,282 +717,6 @@ class PopupManager {
     }
   }
 
-  setupEventListeners() {
-    // Login button
-    const loginButton = document.getElementById("loginButton");
-    if (loginButton) {
-      loginButton.addEventListener("click", () => this.handleLogin());
-      appendDebug("Primary listener bound: loginButton");
-    }
-
-    // Signup button
-    const signupButton = document.getElementById("signupButton");
-    if (signupButton) {
-      signupButton.addEventListener("click", () => this.handleSignup());
-    }
-
-    // Listen for storage changes to detect authentication updates
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-      addVisibleDebug("Storage changed:", changes, namespace); // Debug logging
-      if (
-        namespace === "sync" &&
-        (changes.userToken || changes.userProfile || changes.isAuthenticated)
-      ) {
-        addVisibleDebug(
-          "Auth-related storage change detected (delegating to AuthManager)"
-        );
-        this.authManager.checkAuthStatus().then(() => {
-          const authState = this.authManager.getAuthState();
-          this.isLoggedIn = authState.isLoggedIn;
-          this.currentUser = authState.currentUser;
-          this.updateUIState();
-          if (this.isLoggedIn) {
-            this.loadCustomTones();
-          }
-        });
-      }
-    });
-
-    // Periodic background auth cache check (diagnostic)
-    this._bgDiagInterval = setInterval(() => {
-      try {
-        chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
-          if (resp && resp.auth) {
-            const bgTokenPresent = !!resp.auth.userToken;
-            if (bgTokenPresent && !this.isLoggedIn) {
-              addVisibleDebug(
-                "[Popup] Background has token but popup state logged out. Forcing re-check."
-              );
-              this.checkAuthStatus();
-            }
-          }
-        });
-      } catch (e) {
-        /* ignore */
-      }
-    }, 5000);
-
-    // Tone selectors
-    const toneSelectLoggedOut = document.getElementById(
-      "replyToneSelectLoggedOut"
-    );
-    if (toneSelectLoggedOut) {
-      toneSelectLoggedOut.addEventListener("change", (e) =>
-        this.saveToneSetting(e.target.value)
-      );
-    }
-
-    const toneSelectLoggedIn = document.getElementById("replyToneSelect");
-    if (toneSelectLoggedIn) {
-      toneSelectLoggedIn.addEventListener("change", (e) =>
-        this.saveToneSetting(e.target.value)
-      );
-    }
-
-    // Debug refresh button
-    const debugRefreshButton = document.getElementById("debugRefreshButton");
-    if (debugRefreshButton) {
-      debugRefreshButton.addEventListener("click", () =>
-        this.refreshAuthState()
-      );
-      appendDebug("Primary listener bound: debugRefreshButton");
-    }
-
-    // Dashboard button
-    const dashboardButton = document.getElementById("dashboardButton");
-    if (dashboardButton) {
-      dashboardButton.addEventListener("click", () => this.openDashboard());
-      appendDebug("Primary listener bound: dashboardButton");
-    }
-
-    // Logout button
-    const logoutButton = document.getElementById("logoutButton");
-    if (logoutButton) {
-      logoutButton.addEventListener("click", () => this.handleLogout());
-      appendDebug("Primary listener bound: logoutButton");
-    }
-  }
-
-  async handleLogin() {
-    try {
-      addVisibleDebug("[Popup] handleLogin start");
-      const loginBtn = document.getElementById("loginButton");
-      if (loginBtn) {
-        loginBtn.dataset.originalText = loginBtn.innerHTML;
-        loginBtn.innerHTML = "🔄 Opening login...";
-        loginBtn.disabled = true;
-      } else {
-        addVisibleDebug("[Popup] loginButton not found in DOM");
-      }
-
-      // Use Supabase Auth popup (wrap to capture early failures)
-      let authResult;
-      try {
-        authResult = await this.supabase.authenticateWithPopup("signin");
-        addVisibleDebug("[Popup] authenticateWithPopup resolved");
-      } catch (innerErr) {
-        addVisibleDebug("[Popup] authenticateWithPopup error:", innerErr);
-        throw innerErr;
-      }
-
-      // Handle successful authentication
-      await this.handleAuthResult(authResult, "Login successful!");
-      addVisibleDebug("[Popup] handleAuthResult completed");
-    } catch (error) {
-      addVisibleDebug("Login failed:", error);
-      if (error.message === "Authentication cancelled by user") {
-        this.showError("Login cancelled");
-      } else {
-        this.showError("Login failed. Please try again.");
-      }
-    } finally {
-      const loginBtn = document.getElementById("loginButton");
-      if (loginBtn) {
-        loginBtn.innerHTML =
-          loginBtn.dataset.originalText || "🚀 Login to HumanReplies";
-        loginBtn.disabled = false;
-      }
-      addVisibleDebug("[Popup] handleLogin end");
-    }
-  }
-
-  async handleSignup() {
-    try {
-      // Show loading state
-      const signupBtn = document.querySelector(
-        '.login-button[onclick="handleSignup()"]'
-      );
-      const originalText = signupBtn.innerHTML;
-      signupBtn.innerHTML = "🔄 Opening signup...";
-      signupBtn.disabled = true;
-
-      // Use Supabase Auth popup for signup
-      const authResult = await this.supabase.authenticateWithPopup("signup");
-
-      // Handle successful authentication (either immediate or after email confirmation)
-      await this.handleAuthResult(authResult, "Account created successfully!");
-    } catch (error) {
-      console.error("Signup failed:", error);
-      if (error.message === "Authentication cancelled by user") {
-        this.showError("Signup cancelled");
-      } else {
-        this.showError("Signup failed. Please try again.");
-      }
-    } finally {
-      // Reset button
-      const signupBtn = document.querySelector(
-        '.login-button[onclick="handleSignup()"]'
-      );
-      const originalText = "✨ Create Account";
-      signupBtn.innerHTML = originalText;
-      signupBtn.disabled = false;
-    }
-  }
-
-  async handleLogout() {
-    try {
-      // Get current token
-      const result = await new Promise((resolve) => {
-        chrome.storage.sync.get(["userToken"], resolve);
-      });
-
-      if (result.userToken) {
-        try {
-          // Sign out from Supabase
-          await this.supabase.signOut(result.userToken);
-        } catch (error) {
-          console.warn("Supabase logout failed:", error);
-        }
-      }
-
-      await this.clearAuthData();
-      this.showSuccess("Logged out successfully");
-    } catch (error) {
-      console.error("Logout failed:", error);
-      this.showError("Logout failed");
-    }
-  }
-
-  async handleAuthResult(authResult, successMessage) {
-    if (authResult && authResult.access_token) {
-      console.log("handleAuthResult called with:", authResult);
-
-      // Get user info from Supabase
-      const userInfo = await this.supabase.getUserInfo(authResult.access_token);
-      console.log("User info retrieved:", userInfo);
-
-      // Prepare auth data with user profile
-      const authDataWithProfile = {
-        access_token: authResult.access_token,
-        refresh_token: authResult.refresh_token,
-        expires_in: authResult.expires_in,
-        userProfile: {
-          id: userInfo.id,
-          email: userInfo.email,
-          full_name:
-            userInfo.user_metadata?.full_name || userInfo.email.split("@")[0],
-          avatar_url: userInfo.user_metadata?.avatar_url,
-          created_at: userInfo.created_at,
-        },
-      };
-
-      console.log("Storing auth data using AuthManager:", authDataWithProfile);
-
-      // Use the robust auth manager to store data
-      const stored = await this.authManager.storeAuthData(authDataWithProfile);
-
-      if (stored) {
-        console.log("Auth data stored successfully via AuthManager");
-
-        // Update local state directly (don't wait for AuthManager sync)
-        this.isLoggedIn = true;
-        this.currentUser = authDataWithProfile.userProfile;
-
-        console.log(
-          "Updated local state - isLoggedIn:",
-          this.isLoggedIn,
-          "currentUser:",
-          this.currentUser
-        );
-
-        this.updateUIState();
-        this.showSuccess(successMessage);
-
-        // Reload tones to get user's custom tones
-        await this.loadTones();
-        this.loadCustomTones();
-      } else {
-        console.error("Failed to store auth data");
-        this.showError(
-          "Login successful but failed to save session. Please try again."
-        );
-      }
-    }
-  }
-
-  async clearAuthData() {
-    console.log("Clearing auth data using AuthManager");
-
-    // Use auth manager to clear data
-    await this.authManager.clearAuthData();
-
-    // Update local state
-    this.isLoggedIn = false;
-    this.currentUser = null;
-
-    this.updateUIState();
-  }
-
-  openDashboard() {
-    // Get dashboard URL from environment config
-    const dashboardUrl = window.EnvironmentConfig
-      ? window.EnvironmentConfig.getConfig().dashboardURL
-      : "https://humanreplies.com/dashboard"; // fallback
-
-    chrome.tabs.create({ url: dashboardUrl });
-    console.log("[Popup] Opening dashboard:", dashboardUrl);
-  }
-
   saveToneSetting(tone) {
     this.currentTone = tone;
     chrome.storage.sync.set({ defaultTone: tone });
@@ -970,12 +747,30 @@ class PopupManager {
     }
 
     try {
-      addVisibleDebug("Calling api.getTones()...");
-      const tones = await this.api.getTones();
-      this.allTones = tones; // Store for later use
+      let tones;
+      
+      // Check if we already have tones from preload or cache
+      if (this.allTones && this.allTones.length > 0) {
+        addVisibleDebug("[Popup] Using existing tones:", this.allTones.length);
+        tones = this.allTones;
+      } else {
+        // Check cache first
+        const cachedTones = await this.getCachedTones();
+        if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
+          addVisibleDebug("[Popup] Using cached tones:", cachedTones.tones.length);
+          tones = cachedTones.tones;
+          this.allTones = tones;
+        } else {
+          addVisibleDebug("[Popup] Fetching fresh tones from API...");
+          tones = await this.api.getTones();
+          this.allTones = tones;
+          // Cache the fresh tones
+          await this.cacheTones(tones);
+        }
+      }
 
       addVisibleDebug(
-        "Got " + tones.length + " tones from API: " + JSON.stringify(tones)
+        "Got " + tones.length + " tones: " + JSON.stringify(tones)
       );
 
       // Re-get elements in case they changed
@@ -984,7 +779,7 @@ class PopupManager {
       );
       const toneSelectLoggedIn = document.getElementById("replyToneSelect");
 
-      addVisibleDebug("[Popup] Found tone selects after API call:", {
+      addVisibleDebug("[Popup] Found tone selects after getting tones:", {
         loggedOut: !!toneSelectLoggedOut,
         loggedIn: !!toneSelectLoggedIn,
       });
@@ -1242,19 +1037,404 @@ class PopupManager {
   }
 
   loadToneSetting() {
-    chrome.storage.sync.get(["defaultTone"], (result) => {
-      if (result.defaultTone) {
-        this.currentTone = result.defaultTone;
+    chrome.storage.sync.get(
+      ["defaultTone", "useIntegrations", "enableSelectReply", "enableEverywhere"],
+      (result) => {
+        if (result.defaultTone) {
+          this.currentTone = result.defaultTone;
+        }
+        if (typeof result.useIntegrations === "boolean") {
+          this.useIntegrations = result.useIntegrations;
+        }
+        if (typeof result.enableSelectReply === "boolean") {
+          this.enableSelectReply = result.enableSelectReply;
+        }
+        if (typeof result.enableEverywhere === "boolean") {
+          this.enableEverywhere = result.enableEverywhere;
+        }
+        
+        const loggedOutSelect = document.getElementById(
+          "replyToneSelectLoggedOut"
+        );
+        const loggedInSelect = document.getElementById("replyToneSelect");
+        if (loggedOutSelect) loggedOutSelect.value = this.currentTone;
+        if (loggedInSelect) loggedInSelect.value = this.currentTone;
+        
+        // Update all integration toggles
+        document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
+          el.checked = this.useIntegrations;
+        });
+        document.querySelectorAll(".use-integrations-status").forEach((el) => {
+          el.textContent = this.useIntegrations ? "On" : "Off";
+        });
+        
+        // Update all select reply toggles
+        document
+          .querySelectorAll(".enable-select-reply-toggle")
+          .forEach((el) => {
+            el.checked = this.enableSelectReply;
+          });
+        document
+          .querySelectorAll(".enable-select-reply-status")
+          .forEach((el) => {
+            el.textContent = this.enableSelectReply ? "On" : "Off";
+          });
+        
+        // Update all enable everywhere toggles
+        document
+          .querySelectorAll(".enable-everywhere-toggle")
+          .forEach((el) => {
+            el.checked = this.enableEverywhere;
+          });
+        document
+          .querySelectorAll(".enable-everywhere-status")
+          .forEach((el) => {
+            el.textContent = this.enableEverywhere ? "On" : "Off";
+          });
+      }
+    );
+  }
+
+  saveIntegrationsSetting(enabled) {
+    this.useIntegrations = enabled;
+    chrome.storage.sync.set({ useIntegrations: enabled });
+    document.querySelectorAll(".use-integrations-status").forEach((el) => {
+      el.textContent = enabled ? "On" : "Off";
+    });
+    document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
+      if (el.checked !== enabled) el.checked = enabled;
+    });
+  }
+
+  saveSelectReplySetting(enabled) {
+    this.enableSelectReply = enabled;
+    chrome.storage.sync.set({ enableSelectReply: enabled });
+    document.querySelectorAll(".enable-select-reply-status").forEach((el) => {
+      el.textContent = enabled ? "On" : "Off";
+    });
+    document.querySelectorAll(".enable-select-reply-toggle").forEach((el) => {
+      if (el.checked !== enabled) el.checked = enabled;
+    });
+  }
+
+  saveEnableEverywhereSetting(enabled) {
+    this.enableEverywhere = enabled;
+    chrome.storage.sync.set({ enableEverywhere: enabled });
+    document.querySelectorAll(".enable-everywhere-status").forEach((el) => {
+      el.textContent = enabled ? "On" : "Off";
+    });
+    document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
+      if (el.checked !== enabled) el.checked = enabled;
+    });
+  }
+
+  setupEventListeners() {
+    // Login button
+    const loginButton = document.getElementById("loginButton");
+    if (loginButton) {
+      loginButton.addEventListener("click", () => this.handleLogin());
+      appendDebug("Primary listener bound: loginButton");
+    }
+
+    // Signup button
+    const signupButton = document.getElementById("signupButton");
+    if (signupButton) {
+      signupButton.addEventListener("click", () => this.handleSignup());
+    }
+
+    // Listen for storage changes to detect authentication updates
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      addVisibleDebug("Storage changed:", changes, namespace); // Debug logging
+      if (
+        namespace === "sync" &&
+        (changes.userToken || changes.userProfile || changes.isAuthenticated)
+      ) {
+        addVisibleDebug(
+          "Auth-related storage change detected (delegating to AuthManager)"
+        );
+        this.authManager.checkAuthStatus().then(() => {
+          const authState = this.authManager.getAuthState();
+          this.isLoggedIn = authState.isLoggedIn;
+          this.currentUser = authState.currentUser;
+          this.updateUIState();
+          if (this.isLoggedIn) {
+            this.loadCustomTones();
+          }
+        });
+      }
+    });
+
+    // Periodic background auth cache check (diagnostic)
+    this._bgDiagInterval = setInterval(() => {
+      try {
+        chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
+          if (resp && resp.auth) {
+            const bgTokenPresent = !!resp.auth.userToken;
+            if (bgTokenPresent && !this.isLoggedIn) {
+              addVisibleDebug(
+                "[Popup] Background has token but popup state logged out. Forcing re-check."
+              );
+              this.checkAuthStatus();
+            }
+          }
+        });
+      } catch (e) {
+        /* ignore */
+      }
+    }, 5000);
+
+    // Tone selectors
+    const toneSelectLoggedOut = document.getElementById(
+      "replyToneSelectLoggedOut"
+    );
+    if (toneSelectLoggedOut) {
+      toneSelectLoggedOut.addEventListener("change", (e) =>
+        this.saveToneSetting(e.target.value)
+      );
+    }
+
+    const toneSelectLoggedIn = document.getElementById("replyToneSelect");
+    if (toneSelectLoggedIn) {
+      toneSelectLoggedIn.addEventListener("change", (e) =>
+        this.saveToneSetting(e.target.value)
+      );
+    }
+
+    // Debug refresh button
+    const debugRefreshButton = document.getElementById("debugRefreshButton");
+    if (debugRefreshButton) {
+      debugRefreshButton.addEventListener("click", () =>
+        this.refreshAuthState()
+      );
+      appendDebug("Primary listener bound: debugRefreshButton");
+    }
+
+    // Dashboard button
+    const dashboardButton = document.getElementById("dashboardButton");
+    if (dashboardButton) {
+      dashboardButton.addEventListener("click", () => this.openDashboard());
+      appendDebug("Primary listener bound: dashboardButton");
+    }
+
+    // Logout button
+    const logoutButton = document.getElementById("logoutButton");
+    if (logoutButton) {
+      logoutButton.addEventListener("click", () => this.handleLogout());
+      appendDebug("Primary listener bound: logoutButton");
+    }
+
+    // Integrations toggle
+    const integrationsToggle = document.getElementById("useIntegrationsToggle");
+    if (integrationsToggle) {
+      integrationsToggle.addEventListener("change", (e) => {
+        this.saveIntegrationsSetting(e.target.checked);
+      });
+    }
+    const selectReplyToggle = document.getElementById(
+      "enableSelectReplyToggle"
+    );
+    if (selectReplyToggle) {
+      selectReplyToggle.addEventListener("change", (e) => {
+        this.saveSelectReplySetting(e.target.checked);
+      });
+    }
+
+    document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveIntegrationsSetting(e.target.checked);
+      });
+    });
+    document.querySelectorAll(".enable-select-reply-toggle").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveSelectReplySetting(e.target.checked);
+      });
+    });
+    
+    document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveEnableEverywhereSetting(e.target.checked);
+      });
+    });
+  }
+
+  async handleLogin() {
+    try {
+      addVisibleDebug("[Popup] handleLogin start");
+      const loginBtn = document.getElementById("loginButton");
+      if (loginBtn) {
+        loginBtn.dataset.originalText = loginBtn.innerHTML;
+        loginBtn.innerHTML = "🔄 Opening login...";
+        loginBtn.disabled = true;
+      } else {
+        addVisibleDebug("[Popup] loginButton not found in DOM");
       }
 
-      const loggedOutSelect = document.getElementById(
-        "replyToneSelectLoggedOut"
-      );
-      const loggedInSelect = document.getElementById("replyToneSelect");
+      // Use Supabase Auth popup (wrap to capture early failures)
+      let authResult;
+      try {
+        authResult = await this.supabase.authenticateWithPopup("signin");
+        addVisibleDebug("[Popup] authenticateWithPopup resolved");
+      } catch (innerErr) {
+        addVisibleDebug("[Popup] authenticateWithPopup error:", innerErr);
+        throw innerErr;
+      }
 
-      if (loggedOutSelect) loggedOutSelect.value = this.currentTone;
-      if (loggedInSelect) loggedInSelect.value = this.currentTone;
-    });
+      // Handle successful authentication
+      await this.handleAuthResult(authResult, "Login successful!");
+      addVisibleDebug("[Popup] handleAuthResult completed");
+    } catch (error) {
+      addVisibleDebug("Login failed:", error);
+      if (error.message === "Authentication cancelled by user") {
+        this.showError("Login cancelled");
+      } else {
+        this.showError("Login failed. Please try again.");
+      }
+    } finally {
+      const loginBtn = document.getElementById("loginButton");
+      if (loginBtn) {
+        loginBtn.innerHTML =
+          loginBtn.dataset.originalText || "🚀 Login to HumanReplies";
+        loginBtn.disabled = false;
+      }
+      addVisibleDebug("[Popup] handleLogin end");
+    }
+  }
+
+  async handleSignup() {
+    try {
+      // Show loading state
+      const signupBtn = document.querySelector(
+        '.login-button[onclick="handleSignup()"]'
+      );
+      const originalText = signupBtn.innerHTML;
+      signupBtn.innerHTML = "🔄 Opening signup...";
+      signupBtn.disabled = true;
+
+      // Use Supabase Auth popup for signup
+      const authResult = await this.supabase.authenticateWithPopup("signup");
+
+      // Handle successful authentication (either immediate or after email confirmation)
+      await this.handleAuthResult(authResult, "Account created successfully!");
+    } catch (error) {
+      console.error("Signup failed:", error);
+      if (error.message === "Authentication cancelled by user") {
+        this.showError("Signup cancelled");
+      } else {
+        this.showError("Signup failed. Please try again.");
+      }
+    } finally {
+      // Reset button
+      const signupBtn = document.querySelector(
+        '.login-button[onclick="handleSignup()"]'
+      );
+      const originalText = "✨ Create Account";
+      signupBtn.innerHTML = originalText;
+      signupBtn.disabled = false;
+    }
+  }
+
+  async handleLogout() {
+    try {
+      // Get current token
+      const result = await new Promise((resolve) => {
+        chrome.storage.sync.get(["userToken"], resolve);
+      });
+
+      if (result.userToken) {
+        try {
+          // Sign out from Supabase
+          await this.supabase.signOut(result.userToken);
+        } catch (error) {
+          console.warn("Supabase logout failed:", error);
+        }
+      }
+
+      await this.clearAuthData();
+      this.showSuccess("Logged out successfully");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      this.showError("Logout failed");
+    }
+  }
+
+  async handleAuthResult(authResult, successMessage) {
+    if (authResult && authResult.access_token) {
+      console.log("handleAuthResult called with:", authResult);
+
+      // Get user info from Supabase
+      const userInfo = await this.supabase.getUserInfo(authResult.access_token);
+      console.log("User info retrieved:", userInfo);
+
+      // Prepare auth data with user profile
+      const authDataWithProfile = {
+        access_token: authResult.access_token,
+        refresh_token: authResult.refresh_token,
+        expires_in: authResult.expires_in,
+        userProfile: {
+          id: userInfo.id,
+          email: userInfo.email,
+          full_name:
+            userInfo.user_metadata?.full_name || userInfo.email.split("@")[0],
+          avatar_url: userInfo.user_metadata?.avatar_url,
+          created_at: userInfo.created_at,
+        },
+      };
+
+      console.log("Storing auth data using AuthManager:", authDataWithProfile);
+
+      // Use the robust auth manager to store data
+      const stored = await this.authManager.storeAuthData(authDataWithProfile);
+
+      if (stored) {
+        console.log("Auth data stored successfully via AuthManager");
+
+        // Update local state directly (don't wait for AuthManager sync)
+        this.isLoggedIn = true;
+        this.currentUser = authDataWithProfile.userProfile;
+
+        console.log(
+          "Updated local state - isLoggedIn:",
+          this.isLoggedIn,
+          "currentUser:",
+          this.currentUser
+        );
+
+        this.updateUIState();
+        this.showSuccess(successMessage);
+
+        // Reload tones to get user's custom tones
+        await this.loadTones();
+        this.loadCustomTones();
+      } else {
+        console.error("Failed to store auth data");
+        this.showError(
+          "Login successful but failed to save session. Please try again."
+        );
+      }
+    }
+  }
+
+  async clearAuthData() {
+    console.log("Clearing auth data using AuthManager");
+
+    // Use auth manager to clear data
+    await this.authManager.clearAuthData();
+
+    // Update local state
+    this.isLoggedIn = false;
+    this.currentUser = null;
+
+    this.updateUIState();
+  }
+
+  openDashboard() {
+    // Get dashboard URL from environment config
+    const dashboardUrl = window.EnvironmentConfig
+      ? window.EnvironmentConfig.getConfig().dashboardURL
+      : "https://humanreplies.com/dashboard"; // fallback
+
+    chrome.tabs.create({ url: dashboardUrl });
+    console.log("[Popup] Opening dashboard:", dashboardUrl);
   }
 
   updateUIState() {

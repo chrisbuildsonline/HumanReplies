@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "HumanReplies",
   "version": "1.0.0",
-  "description": "AI-powered reply generation for social media platforms",
+  "description": "AI-powered replies, anywhere you need them.",
   "permissions": [
     "activeTab",
     "storage",
@@ -24,23 +24,10 @@
   "content_scripts": [
     {
       "matches": [
-        "https://x.com/*",
-        "https://twitter.com/*"
+        "<all_urls>"
       ],
       "js": [
-        "content-scripts/x-content.js"
-      ],
-      "css": [
-        "styles.css"
-      ],
-      "type": "module"
-    },
-    {
-      "matches": [
-        "https://www.linkedin.com/*"
-      ],
-      "js": [
-        "content-scripts/linkedin-content.js"
+        "content-scripts/context.js"
       ],
       "css": [
         "styles.css"
@@ -68,6 +55,15 @@
       ],
       "matches": [
         "https://anhcptguetscsoejzyed.supabase.co/*"
+      ]
+    },
+    {
+      "resources": [
+        "core/api-service.js",
+        "config/environment.js"
+      ],
+      "matches": [
+        "https://www.linkedin.com/*"
       ]
     }
   ]
