@@ -8,6 +8,16 @@ from app.config import settings
 from app.database import engine, Base
 import uvicorn
 import logging
+from app.config import settings
+
+if settings.redis_enabled:
+    try:
+        from app.cache import redis_cache  # noqa: F401
+        logger = logging.getLogger(__name__)
+        logger.info("Redis caching enabled")
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning("Redis enabled in settings but initialization failed")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

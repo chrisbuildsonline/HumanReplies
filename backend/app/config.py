@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     
+    # Redis Cache
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_enabled: bool = True
+    
     class Config:
         env_file = ".env"
 

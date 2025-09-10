@@ -5,6 +5,7 @@ from app.models import Tone, ToneResponse, TonesListResponse, ToneCreateRequest,
 from app.database import get_db
 from app.auth import get_optional_user, get_current_user
 from typing import List, Optional, Dict, Any
+from app.cache import redis_cache
 import logging
 import re
 
@@ -12,62 +13,80 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tones", tags=["Tones"])
 
+async def invalidate_tone_caches(user_supabase_id: str):
+    """Invalidate relevant Redis tone caches after mutation."""
+    try:
+        # Best-effort; ignore if Redis disabled
+        await redis_cache.set_json("tones:presets", None, 1)  # force expire
+        await redis_cache.set_json(f"tones:user:{user_supabase_id}", None, 1)
+    except Exception:
+        pass
+
 @router.get("/", response_model=TonesListResponse)
 async def get_tones(
     db: AsyncSession = Depends(get_db),
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
 ):
-    """Get all active tones (presets + user's custom tones if authenticated)"""
+    """Get all active tones (presets + user's custom tones if authenticated)
+
+    Caching strategy:
+    - Preset-only results cached under key: tones:presets
+    - Authenticated user results cached under key: tones:user:<supabase_user_id>
+    - TTL: 300 seconds (5 minutes)
+    - Custom tone mutations (create/update/delete) will invalidate user + presets cache.
+    """
     try:
-        # Base query for preset tones (excluding "ask" which is handled by frontend)
-        query = select(Tone).where(
-            and_(
-                Tone.is_active == True, 
-                Tone.is_preset == True,
-                Tone.name != "ask"  # Exclude "ask" tone - handled by frontend
-            )
-        )
-        
-        # If user is authenticated, also include their custom tones
+        cache_key: Optional[str] = None
         if current_user:
-            # Get user from database
-            user_result = await db.execute(
-                select(User).where(User.supabase_user_id == current_user["id"])
+            cache_key = f"tones:user:{current_user['id']}"
+        else:
+            cache_key = "tones:presets"
+
+        async def load_tones():
+            # Base query for preset tones (excluding "ask")
+            query = select(Tone).where(
+                and_(
+                    Tone.is_active == True,
+                    Tone.is_preset == True,
+                    Tone.name != "ask"
+                )
             )
-            user = user_result.scalar_one_or_none()
-            
-            if user:
-                # Include both preset tones and user's custom tones (excluding "ask")
-                query = select(Tone).where(
-                    and_(
-                        Tone.is_active == True,
-                        Tone.name != "ask",  # Exclude "ask" tone - handled by frontend
-                        or_(
-                            Tone.is_preset == True,
-                            Tone.user_id == user.id
+            if current_user:
+                user_result = await db.execute(
+                    select(User).where(User.supabase_user_id == current_user["id"])
+                )
+                user = user_result.scalar_one_or_none()
+                if user:
+                    query = select(Tone).where(
+                        and_(
+                            Tone.is_active == True,
+                            Tone.name != "ask",
+                            or_(
+                                Tone.is_preset == True,
+                                Tone.user_id == user.id
+                            )
                         )
                     )
+            result = await db.execute(query.order_by(Tone.sort_order, Tone.name))
+            tones = result.scalars().all()
+            tone_responses = [
+                dict(
+                    id=str(tone.id),
+                    name=tone.name,
+                    display_name=tone.display_name,
+                    description=tone.description,
+                    is_preset=tone.is_preset,
+                    is_active=tone.is_active,
+                    sort_order=tone.sort_order,
+                    user_id=str(tone.user_id) if tone.user_id else None
                 )
-        
-        result = await db.execute(query.order_by(Tone.sort_order, Tone.name))
-        tones = result.scalars().all()
-        
-        tone_responses = [
-            ToneResponse(
-                id=str(tone.id),
-                name=tone.name,
-                display_name=tone.display_name,
-                description=tone.description,
-                is_preset=tone.is_preset,
-                is_active=tone.is_active,
-                sort_order=tone.sort_order,
-                user_id=str(tone.user_id) if tone.user_id else None
-            )
-            for tone in tones
-        ]
-        
-        return TonesListResponse(tones=tone_responses)
-        
+                for tone in tones
+            ]
+            return {"tones": tone_responses}
+
+        data, from_cache = await redis_cache.cached(cache_key, 300, load_tones)
+        # Convert dicts back into response model objects automatically by FastAPI
+        return TonesListResponse(**data)
     except Exception as e:
         logger.error(f"Failed to get tones: {str(e)}")
         raise HTTPException(
@@ -176,6 +195,8 @@ async def create_custom_tone(
         await db.commit()
         await db.refresh(new_tone)
         
+        # Invalidate caches
+        await invalidate_tone_caches(current_user["id"])
         return ToneResponse(
             id=str(new_tone.id),
             name=new_tone.name,
@@ -186,7 +207,6 @@ async def create_custom_tone(
             sort_order=new_tone.sort_order,
             user_id=str(new_tone.user_id)
         )
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -273,6 +293,8 @@ async def update_custom_tone(
         await db.commit()
         await db.refresh(tone)
         
+        # Invalidate caches
+        await invalidate_tone_caches(current_user["id"])
         return ToneResponse(
             id=str(tone.id),
             name=tone.name,
@@ -283,7 +305,6 @@ async def update_custom_tone(
             sort_order=tone.sort_order,
             user_id=str(tone.user_id)
         )
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -337,8 +358,9 @@ async def delete_custom_tone(
         await db.delete(tone)
         await db.commit()
         
+        # Invalidate caches
+        await invalidate_tone_caches(current_user["id"])
         return {"success": True, "message": "Tone deleted successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:

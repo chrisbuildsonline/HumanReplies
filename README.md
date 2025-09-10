@@ -249,7 +249,8 @@ extension/
 - 📊 **Dashboard Statistics**: Real-time analytics and insights
 - 🔧 **Multi-platform Support**: Extensible service type system
 - 🎨 **Custom Tones**: User-specific tone creation and management
-- 🛡️ **Type Safety**: Pydantic models for all API interactions
+- � **Redis Caching**: Fast in-memory cache for tones (5 min TTL) to reduce DB load
+- �🛡️ **Type Safety**: Pydantic models for all API interactions
 
 ### API Endpoints
 
@@ -386,6 +387,12 @@ DATABASE_PASSWORD=password
 ENVIRONMENT=development
 API_HOST=0.0.0.0
 API_PORT=8000
+
+# Redis (optional, caching)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_ENABLED=true
 ```
 
 ### External Service URL Management
@@ -429,6 +436,25 @@ alembic upgrade head
 # Run development server
 python run.py
 ```
+
+### Redis Caching Layer
+
+The backend uses Redis (if enabled) for lightweight response caching:
+
+| Cache Key Pattern             | Description                                  | TTL |
+| ----------------------------- | -------------------------------------------- | --- |
+| `tones:presets`              | Preset tones list (unauthenticated)          | 300s |
+| `tones:user:<supabase_id>`   | Authenticated user's combined tone list      | 300s |
+
+Cache invalidation occurs automatically on tone create/update/delete. If Redis is unreachable, the app gracefully continues without caching.
+
+To run a local Redis instance (Docker):
+
+```bash
+docker run -d --name humanreplies-redis -p 6379:6379 redis:7-alpine
+```
+
+Set `REDIS_ENABLED=false` to disable caching.
 
 ---
 
