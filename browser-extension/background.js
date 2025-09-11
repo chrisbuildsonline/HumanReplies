@@ -19,25 +19,51 @@ async function initializeApiService() {
 }
 
 // Initialize on startup
-initializeApiService()
-  .then(() => {
-    console.log("Background service worker initialized");
-  })
-  .catch((error) => {
-    console.error("Failed to initialize background service worker:", error);
-  });
+initializeApiService().then(() => {
+  // After API service ready perform an initial connectivity check
+  performConnectivityCheck("background-startup");
+});
+
+// Periodic connectivity checks so content scripts can read fresh status
+let connectivityInterval = null;
+function startConnectivityLoop() {
+  if (connectivityInterval) return;
+  connectivityInterval = setInterval(() => {
+    performConnectivityCheck("background-interval");
+  }, 30000); // every 30s
+}
+startConnectivityLoop();
+
+async function performConnectivityCheck(source = "background-manual") {
+  try {
+    const api = await initializeApiService();
+    if (api && typeof api.checkConnectivity === "function") {
+      const result = await api.checkConnectivity();
+      chrome.storage.local.set({
+        humanreplies_api_status: {
+          isOnline: !!result.isOnline,
+          lastChecked: Date.now(),
+          source,
+          error: result.error || null,
+        },
+      });
+    }
+  } catch (e) {
+    chrome.storage.local.set({
+      humanreplies_api_status: {
+        isOnline: false,
+        lastChecked: Date.now(),
+        source,
+        error: e.message || "connectivity check failed",
+      },
+    });
+  }
+}
 
 // We'll handle CORS on the server side instead
 
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("[BG] Received message:", request);
-  console.log("[BG] Sender:", sender);
-
-  if (request && request.action) {
-    console.log("[BG] Processing action:", request.action);
-  }
-
   if (request.action === "authUpdated") {
     currentAuthState = {
       userToken: request.data?.userToken || null,
@@ -47,7 +73,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       isAuthenticated: !!request.data?.userToken,
       updatedAt: Date.now(),
     };
-    console.log("[BG] Auth cache updated");
     sendResponse({ ok: true });
     return true;
   }
@@ -75,20 +100,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       },
       () => {
         if (chrome.runtime.lastError) {
-          console.error(
-            "[BG] Failed to cache tones:",
-            chrome.runtime.lastError
-          );
           sendResponse({
             success: false,
             error: chrome.runtime.lastError.message,
           });
         } else {
-          console.log(
-            "[BG] Tones cached successfully:",
-            request.tones.length,
-            "tones"
-          );
           sendResponse({ success: true });
         }
       }
@@ -139,8 +155,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "updateApiStatus") {
-    console.log("[BG] updateApiStatus request:", request);
-
     // Update API status in storage (popup is notifying us of a status change)
     const statusUpdate = {
       isOnline: !!request.isOnline,
@@ -148,26 +162,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       source: request.source || "popup",
     };
 
-    console.log("[BG] Updating storage with:", statusUpdate);
-
     chrome.storage.local.set({ humanreplies_api_status: statusUpdate }, () => {
       if (chrome.runtime.lastError) {
-        console.error(
-          "[BG] Failed to update API status:",
-          chrome.runtime.lastError
-        );
         sendResponse({
           success: false,
           error: chrome.runtime.lastError.message,
         });
       } else {
-        console.log(
-          "[BG] API status updated by",
-          request.source,
-          "->",
-          request.isOnline ? "online" : "offline"
-        );
-        console.log("[BG] Storage update successful");
         sendResponse({ success: true });
       }
     });
@@ -175,105 +176,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "refreshConnectivity") {
-    console.log(
-      "[BG] refreshConnectivity request from:",
-      sender.tab ? "content script" : "popup"
-    );
-    console.log("[BG] Full request:", request);
-
     // Try to do a simple connectivity check by testing the API endpoint
-    initializeApiService()
-      .then(async (api) => {
-        try {
-          console.log("[BG] Testing API connectivity...");
-
-          // Try a simple fetch to the API base URL with short timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-          const response = await fetch(api.getBaseURL() + "/health", {
-            method: "GET",
-            signal: controller.signal,
-            headers: { "Content-Type": "application/json" },
-          });
-
-          clearTimeout(timeoutId);
-
-          const isOnline = response.ok;
-          console.log(
-            "[BG] API connectivity test result:",
-            isOnline ? "online" : "offline"
-          );
-
-          const statusUpdate = {
-            isOnline: isOnline,
-            lastChecked: Date.now(),
-            source: "background-connectivity-check",
-          };
-
-          chrome.storage.local.set(
-            { humanreplies_api_status: statusUpdate },
-            () => {
-              if (chrome.runtime.lastError) {
-                console.error(
-                  "[BG] Failed to update status:",
-                  chrome.runtime.lastError
-                );
-                sendResponse({
-                  success: false,
-                  error: chrome.runtime.lastError.message,
-                });
-              } else {
-                console.log(
-                  "[BG] Connectivity status updated:",
-                  isOnline ? "online" : "offline"
-                );
-                sendResponse({ success: true, isOnline: isOnline });
-              }
-            }
-          );
-        } catch (error) {
-          console.log("[BG] API connectivity test failed:", error.message);
-
-          const statusUpdate = {
-            isOnline: false,
-            lastChecked: Date.now(),
-            source: "background-connectivity-check",
-            error: error.message,
-          };
-
-          chrome.storage.local.set(
-            { humanreplies_api_status: statusUpdate },
-            () => {
-              if (chrome.runtime.lastError) {
-                console.error(
-                  "[BG] Failed to update status:",
-                  chrome.runtime.lastError
-                );
-                sendResponse({
-                  success: false,
-                  error: chrome.runtime.lastError.message,
-                });
-              } else {
-                console.log(
-                  "[BG] Connectivity status updated: offline (error)"
-                );
-                sendResponse({
-                  success: true,
-                  isOnline: false,
-                  error: error.message,
-                });
-              }
-            }
-          );
-        }
+    performConnectivityCheck("background-connectivity-check")
+      .then(() => {
+        // We rely on storage listener; respond optimistically
+        sendResponse({ success: true });
       })
-      .catch((error) => {
-        console.error("[BG] Failed to initialize API service:", error);
-        sendResponse({
-          success: false,
-          error: "Failed to initialize API service",
-        });
+      .catch(() => {
+        sendResponse({ success: false, error: "connectivity check failed" });
       });
 
     return true;
@@ -281,9 +191,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Extension installation
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("HumanReplies extension installed");
-});
+chrome.runtime.onInstalled.addListener(() => {});
 
 function getNextMidnight() {
   const now = new Date();

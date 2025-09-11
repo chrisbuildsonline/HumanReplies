@@ -6,11 +6,33 @@ let enableEverywhere = false;
 let isApiOnline = false;
 let defaultTone = "ask";
 let isUpdatingApiStatus = false; // Flag to prevent feedback loops
+let isExtensionContextInvalidated = false; // Flag to track invalid extension context
 
-console.log("HumanReplies context.js loaded");
+
+// Helper function to check if extension context is still valid
+function isExtensionContextValid() {
+  try {
+    // chrome.runtime.id becomes undefined when context is invalidated
+    return typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id;
+  } catch (error) {
+    // Any error accessing chrome.runtime indicates invalidation
+    return false;
+  }
+}
 
 // Helper function to check if chrome APIs are available
 function isChromeApiAvailable() {
+  if (isExtensionContextInvalidated) {
+    return false;
+  }
+
+  if (!isExtensionContextValid()) {
+    console.warn("Extension context has been invalidated");
+    isExtensionContextInvalidated = true;
+    shutdownGracefully();
+    return false;
+  }
+
   return typeof chrome !== "undefined" && chrome.storage && chrome.runtime;
 }
 
@@ -22,10 +44,38 @@ async function safeChromeStorageGet(storageType, keys) {
   }
 
   try {
-    return await new Promise((resolve) => {
-      chrome.storage[storageType].get(keys, resolve);
+    return await new Promise((resolve, reject) => {
+      // Double-check context validity before making the call
+      if (!isExtensionContextValid()) {
+        console.warn("Extension context invalidated before storage get");
+        isExtensionContextInvalidated = true;
+        shutdownGracefully();
+        resolve({});
+        return;
+      }
+
+      chrome.storage[storageType].get(keys, (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(result);
+        }
+      });
     });
   } catch (error) {
+    // Check for extension context invalidation
+    if (
+      error.message &&
+      (error.message.includes("Extension context invalidated") ||
+        error.message.includes("receiving end does not exist"))
+    ) {
+      console.warn(
+        "Extension context invalidated - shutting down context script"
+      );
+      isExtensionContextInvalidated = true;
+      shutdownGracefully();
+      return {};
+    }
     console.error("Chrome storage get error:", error);
     return {};
   }
@@ -38,32 +88,87 @@ async function safeChromeStorageSet(storageType, data) {
   }
 
   try {
-    await new Promise((resolve) => {
-      chrome.storage[storageType].set(data, resolve);
+    await new Promise((resolve, reject) => {
+      // Double-check context validity before making the call
+      if (!isExtensionContextValid()) {
+        console.warn("Extension context invalidated before storage set");
+        isExtensionContextInvalidated = true;
+        shutdownGracefully();
+        resolve();
+        return;
+      }
+
+      chrome.storage[storageType].set(data, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
     });
   } catch (error) {
+    // Check for extension context invalidation
+    if (
+      error.message &&
+      (error.message.includes("Extension context invalidated") ||
+        error.message.includes("receiving end does not exist"))
+    ) {
+      console.warn("Extension context invalidated during storage set");
+      isExtensionContextInvalidated = true;
+      shutdownGracefully();
+      return;
+    }
     console.error("Chrome storage set error:", error);
   }
 }
 
+// Graceful shutdown when extension context is invalidated
+function shutdownGracefully() {
+
+  // Clear intervals and timeouts
+  if (offlineStatusInterval) {
+    clearInterval(offlineStatusInterval);
+    offlineStatusInterval = null;
+  }
+
+  // Remove UI elements
+  if (replyButton) {
+    replyButton.remove();
+    replyButton = null;
+  }
+
+  if (toneMenu) {
+    toneMenu.remove();
+    toneMenu = null;
+  }
+
+  // Hide any notifications
+  hideAllBoxes();
+
+  // Remove event listeners
+  document.removeEventListener("mouseup", handleSelection);
+  document.removeEventListener("keyup", handleSelection);
+
+}
+
 // Helper function to update API status without triggering feedback loops
 async function updateApiStatus(isOnline, source = "content-script") {
+  if (isExtensionContextInvalidated) return;
+
   isUpdatingApiStatus = true;
   try {
     const statusUpdate = {
       isOnline: !!isOnline, // Ensure boolean
       lastChecked: Date.now(),
       source: source,
-      checkedAt: new Date().toISOString()
+      checkedAt: new Date().toISOString(),
     };
-    
+
     await safeChromeStorageSet("local", {
-      humanreplies_api_status: statusUpdate
+      humanreplies_api_status: statusUpdate,
     });
-    
-    console.log(`[Context] API status set to ${isOnline ? "online" : "offline"} by ${source}`);
-    console.log(`[Context] Status object:`, statusUpdate);
-    
+
+
     // Update local state
     isApiOnline = isOnline;
   } finally {
@@ -96,17 +201,13 @@ async function loadTonesFromStorage() {
       result.humanreplies_tones_cache &&
       result.humanreplies_tones_cache.tones
     ) {
-      console.log(
-        "Loaded tones from localStorage:",
-        result.humanreplies_tones_cache.tones.length
-      );
       availableTones = result.humanreplies_tones_cache.tones;
     } else {
-      console.log("No tones in localStorage, using fallback tones");
+      // console.log("No tones in localStorage, using fallback tones");
       availableTones = fallbackTones;
     }
   } catch (err) {
-    console.log("Error loading tones from localStorage, using fallback:", err);
+    // console.log("Error loading tones from localStorage, using fallback:", err);
     availableTones = fallbackTones;
   }
 }
@@ -131,9 +232,9 @@ async function loadEnableEverywhereSetting() {
     const result = await safeChromeStorageGet("sync", ["enableEverywhere"]);
     enableEverywhere =
       result.enableEverywhere !== undefined ? result.enableEverywhere : false;
-    console.log("Enable everywhere setting:", enableEverywhere);
+    // console.log("Enable everywhere setting:", enableEverywhere);
   } catch (err) {
-    console.log("Error loading enable everywhere setting:", err);
+    // console.log("Error loading enable everywhere setting:", err);
     enableEverywhere = false;
   }
 }
@@ -143,9 +244,9 @@ async function loadDefaultToneSetting() {
   try {
     const result = await safeChromeStorageGet("sync", ["defaultTone"]);
     defaultTone = result.defaultTone || "ask";
-    console.log("Default tone setting:", defaultTone);
+    // console.log("Default tone setting:", defaultTone);
   } catch (err) {
-    console.log("Error loading default tone setting:", err);
+    // console.log("Error loading default tone setting:", err);
     defaultTone = "ask";
   }
 }
@@ -159,23 +260,47 @@ async function loadApiStatus() {
 
     if (result.humanreplies_api_status) {
       const status = result.humanreplies_api_status;
-      const isRecent = Date.now() - status.lastChecked < 60000; // 1 minute
-
-      if (isRecent) {
-        isApiOnline = status.isOnline;
-        console.log("Loaded API status:", isApiOnline ? "online" : "offline");
-      } else {
-        console.log(
-          "API status cache expired, assuming offline until live check"
-        );
-        isApiOnline = false;
-      }
+      isApiOnline = !!status.isOnline;
+      // console.log("Loaded API status:", isApiOnline ? "online" : "offline");
     } else {
-      console.log("No API status found, assuming offline until live check");
-      isApiOnline = false;
+      // console.log("No API status found in storage. Requesting background refresh...");
+      isApiOnline = false; // temporary until refresh
+      if (isChromeApiAvailable() && !window.__hr_requested_initial_status) {
+        window.__hr_requested_initial_status = true;
+        try {
+          if (isExtensionContextValid()) {
+            chrome.runtime.sendMessage({ action: "refreshConnectivity" });
+          }
+          // Try a delayed re-read after 1s
+          setTimeout(async () => {
+            const retry = await safeChromeStorageGet("local", [
+              "humanreplies_api_status",
+            ]);
+            if (retry.humanreplies_api_status) {
+              const s = retry.humanreplies_api_status;
+              isApiOnline = !!s.isOnline;
+              // console.log("Status loaded after refresh:", isApiOnline ? "online" : "offline");
+              if (isApiOnline) {
+                // Stop offline polling if running
+                if (offlineStatusInterval) {
+                  clearInterval(offlineStatusInterval);
+                  offlineStatusInterval = null;
+                }
+              } else {
+                startOfflineStatusPolling();
+              }
+            } else {
+              // console.log("Still no status after refresh attempt; will rely on polling");
+              startOfflineStatusPolling();
+            }
+          }, 1000);
+        } catch (e) {
+          console.warn("Failed to request connectivity refresh", e);
+        }
+      }
     }
   } catch (err) {
-    console.log("Error loading API status:", err);
+    // console.log("Error loading API status:", err);
     isApiOnline = false;
   }
 }
@@ -184,7 +309,7 @@ async function loadApiStatus() {
 function shouldBeActive() {
   // First check if API is online
   if (!isApiOnline) {
-    console.log("Context.js disabled - API is offline");
+    // console.log("Context.js disabled - API is offline");
     return false;
   }
 
@@ -195,14 +320,7 @@ function shouldBeActive() {
 
   // Default behavior: only active on social media sites
   const isOnSocialMedia = isSocialMediaSite();
-  console.log(
-    "Checking if should be active - enableEverywhere:",
-    enableEverywhere,
-    "isOnSocialMedia:",
-    isOnSocialMedia,
-    "isApiOnline:",
-    isApiOnline
-  );
+  // console.log("Checking if should be active - enableEverywhere:", enableEverywhere, "isOnSocialMedia:", isOnSocialMedia, "isApiOnline:", isApiOnline);
   return isOnSocialMedia;
 }
 
@@ -214,9 +332,7 @@ async function initialize() {
   await loadDefaultToneSetting();
 
   if (!shouldBeActive()) {
-    console.log(
-      "Context.js disabled - API offline or restricted to social media"
-    );
+    // console.log("Context.js disabled - API offline or restricted to social media");
     if (!isApiOnline) {
       startOfflineStatusPolling();
     }
@@ -229,13 +345,13 @@ async function initialize() {
     offlineStatusInterval = null;
   }
 
-  console.log("Context.js active on this site");
+  // console.log("Context.js active on this site");
 }
 
 initialize();
 
 function createToneMenu(buttonElement) {
-  console.log("Creating tone menu with", availableTones.length, "tones");
+  // console.log("Creating tone menu with", availableTones.length, "tones");
 
   // Remove existing menu
   if (toneMenu) {
@@ -245,7 +361,7 @@ function createToneMenu(buttonElement) {
 
   // Ensure tones are loaded
   if (availableTones.length === 0) {
-    console.log("No tones available, reloading from storage");
+    // console.log("No tones available, reloading from storage");
     loadTonesFromStorage().then(() => {
       if (availableTones.length > 0) {
         createToneMenu(buttonElement); // Retry after loading
@@ -281,6 +397,7 @@ function createToneMenu(buttonElement) {
       display: block;
       width: 100%;
       padding: 6px 8px;
+      color: #000 !important;
       border: none;
       background: transparent;
       text-align: left;
@@ -328,7 +445,7 @@ function createToneMenu(buttonElement) {
 }
 
 function createReplyButton() {
-  console.log("Creating reply button");
+  // console.log("Creating reply button");
   const button = document.createElement("div");
   button.id = "humanreplies-reply-button";
   button.innerHTML = "💬 Generate Reply";
@@ -382,7 +499,7 @@ function createReplyButton() {
   button.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log("Reply button clicked, default tone:", defaultTone);
+    // console.log("Reply button clicked, default tone:", defaultTone);
 
     // If a preset tone is set (not "ask"), generate reply directly
     if (defaultTone && defaultTone !== "ask") {
@@ -398,7 +515,7 @@ function createReplyButton() {
 }
 
 function showReplyButton(selection) {
-  console.log("showReplyButton called with selection:", selection.toString());
+  // console.log("showReplyButton called with selection:", selection.toString());
 
   if (!replyButton) {
     replyButton = createReplyButton();
@@ -407,17 +524,18 @@ function showReplyButton(selection) {
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();
 
-  console.log("Selection rect:", rect);
-  console.log("Button position:", {
-    left: rect.right + 10 + window.scrollX,
-    top: rect.top + window.scrollY,
-  });
+  // console.log("Selection rect:", rect);
+  // console.log("Button position:", { left: rect.right + 10 + window.scrollX, top: rect.top + window.scrollY });
+
+  // Store button position for later use by boxes
+  replyButtonPosition.left = rect.right + 10 + window.scrollX;
+  replyButtonPosition.top = rect.top + window.scrollY;
 
   replyButton.style.display = "block";
-  replyButton.style.left = `${rect.right + 10 + window.scrollX}px`;
-  replyButton.style.top = `${rect.top + window.scrollY}px`;
+  replyButton.style.left = `${replyButtonPosition.left}px`;
+  replyButton.style.top = `${replyButtonPosition.top}px`;
 
-  console.log("Button should now be visible");
+  // console.log("Button should now be visible");
 }
 
 function hideReplyButton() {
@@ -445,6 +563,7 @@ function enforceCharacterLimit(text, maxLength) {
 let loadingBox = null;
 let successBox = null;
 let errorBox = null;
+let replyButtonPosition = { left: 0, top: 0 };
 
 function showLoadingBox() {
   // Remove any existing boxes
@@ -455,13 +574,13 @@ function showLoadingBox() {
   loadingBox.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <span>Generating reply...</span>
+      <span>Generating reply suggestions...</span>
     </div>
   `;
   loadingBox.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
+    position: absolute;
+    left: ${replyButtonPosition.left}px;
+    top: ${replyButtonPosition.top + 40}px;
     background: white;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -474,11 +593,41 @@ function showLoadingBox() {
     min-width: 200px;
   `;
 
-  // Add animation keyframes if not already added
+  // Add animation keyframes and CSS variables if not already added
   if (!document.querySelector("style[data-humanreplies-loading]")) {
     const style = document.createElement("style");
     style.setAttribute("data-humanreplies-loading", "true");
     style.textContent = `
+      :root {
+        --color-black: #000;
+        --color-orange: #ff7900;
+        --color-white: #fff;
+        --border-radius: 8px;
+      }
+      
+      .chunky-button {
+        display: inline-block;
+        border: 4px solid var(--color-black);
+        background: var(--color-orange);
+        color: var(--color-white);
+        font-size: 1.15rem;
+        font-weight: bold;
+        padding: 0.75em 2.5em;
+        border-radius: var(--border-radius);
+        box-shadow: 6px 6px 0px var(--color-black);
+        transition:
+          transform 0.18s cubic-bezier(.4,2,.6,.8),
+          box-shadow 0.18s cubic-bezier(.78,.17,.27,.89);
+        cursor: pointer;
+        outline: none;
+        position: relative;
+      }
+      .chunky-button:hover,
+      .chunky-button:focus-visible {
+        transform: translate(3px, 3px);
+        box-shadow: 0px 0px 0px var(--color-black);
+      }
+      
       @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
@@ -514,13 +663,13 @@ function showSuccessBox(variations, remainingReplies) {
 
   successBox.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <span style="font-weight: 600; color: #27ae60;">✅ Reply Generated</span>
+      <span style="font-weight: 600; color: #000000;">Reply Suggestions</span>
       <button id="humanreplies-close-btn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
     </div>
     ${
       hasMultipleVariations
         ? `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 4px 8px; background: transparent; border-radius: 4px;">
         <button id="humanreplies-prev-btn" style="
           background: none;
           border: none;
@@ -556,14 +705,16 @@ function showSuccessBox(variations, remainingReplies) {
     }
     <textarea id="humanreplies-reply-text" style="
       width: 100%;
-      min-height: 80px;
-      border: 1px solid #ddd;
+      min-height: 120px;
+      border: 1px solid #111;
+      background: #fff !important;
       border-radius: 4px;
       padding: 8px;
       font-family: inherit;
       font-size: 13px;
       resize: vertical;
       margin-bottom: 8px;
+      box-shadow: 2px 2px 1px 1px #000;
     ">${currentReply}</textarea>
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <span id="humanreplies-char-count" style="font-size: 11px; color: #666;">
@@ -571,27 +722,22 @@ function showSuccessBox(variations, remainingReplies) {
     remainingReplies ? ` • ${remainingReplies} replies left` : ""
   }
       </span>
-      <button id="humanreplies-copy-btn" style="
-        background: #3498db;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 12px;
-        cursor: pointer;
+      <button id="humanreplies-copy-btn" class="chunky-button" style="
         display: flex;
         align-items: center;
         gap: 4px;
+        font-size: 12px;
+        padding: 6px 12px;
       ">
-        📋 Copy
+        Copy
       </button>
     </div>
   `;
 
   successBox.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
+    position: absolute;
+    left: ${replyButtonPosition.left}px;
+    top: ${replyButtonPosition.top + 40}px;
     background: white;
     border: 1px solid #27ae60;
     border-radius: 8px;
@@ -607,6 +753,11 @@ function showSuccessBox(variations, remainingReplies) {
 
   document.body.appendChild(successBox);
 
+  // Hide reply button when hovering over success box
+  successBox.addEventListener("mouseenter", () => {
+    hideReplyButton();
+  });
+
   // Add event listeners
   const closeBtn = successBox.querySelector("#humanreplies-close-btn");
   const copyBtn = successBox.querySelector("#humanreplies-copy-btn");
@@ -615,6 +766,17 @@ function showSuccessBox(variations, remainingReplies) {
   const nextBtn = successBox.querySelector("#humanreplies-next-btn");
   const charCount = successBox.querySelector("#humanreplies-char-count");
 
+  // Hide reply button when selecting text inside textarea
+  textarea.addEventListener("mouseup", () => {
+    hideReplyButton();
+  });
+  textarea.addEventListener("keyup", () => {
+    hideReplyButton();
+  });
+  textarea.addEventListener("select", () => {
+    hideReplyButton();
+  });
+
   closeBtn.addEventListener("click", () => {
     hideSuccessBox();
   });
@@ -622,15 +784,15 @@ function showSuccessBox(variations, remainingReplies) {
   copyBtn.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(textarea.value);
-      copyBtn.innerHTML = "✅ Copied!";
+      copyBtn.innerHTML = "Copied!";
       setTimeout(() => {
-        copyBtn.innerHTML = "📋 Copy";
-      }, 2000);
+        hideSuccessBox();
+      }, 1000);
     } catch (err) {
       console.error("Failed to copy text:", err);
       copyBtn.innerHTML = "❌ Failed";
       setTimeout(() => {
-        copyBtn.innerHTML = "📋 Copy";
+        copyBtn.innerHTML = "Copy";
       }, 2000);
     }
   });
@@ -734,9 +896,9 @@ function showErrorBox(errorMessage) {
   `;
 
   errorBox.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
+    position: absolute;
+    left: ${replyButtonPosition.left}px;
+    top: ${replyButtonPosition.top + 40}px;
     background: #fff8dc;
     border: 1px solid #f39c12;
     border-radius: 8px;
@@ -777,7 +939,7 @@ function hideAllBoxes() {
 }
 
 async function handleReplyGeneration(tone) {
-  console.log("Generate reply for:", selectedText, "with tone:", tone);
+  // console.log("Generate reply for:", selectedText, "with tone:", tone);
 
   // Hide the reply button
   hideReplyButton();
@@ -797,8 +959,8 @@ async function handleReplyGeneration(tone) {
       platform = "facebook";
     }
 
-    // Check if chrome.runtime is available
-    if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+    // Check if chrome.runtime is available and extension context is valid
+    if (!isChromeApiAvailable()) {
       hideLoadingBox();
       showErrorBox(
         "Extension is not properly loaded. Please refresh the page and try again."
@@ -810,6 +972,12 @@ async function handleReplyGeneration(tone) {
     const response = await Promise.race([
       new Promise((resolve, reject) => {
         try {
+          // Double-check extension context before sending message
+          if (!isExtensionContextValid()) {
+            reject(new Error("Extension context invalidated"));
+            return;
+          }
+
           chrome.runtime.sendMessage(
             {
               action: "generateReply",
@@ -844,6 +1012,12 @@ async function handleReplyGeneration(tone) {
       // Enforce character limit based on platform
       const maxLength = platform === "x" ? 280 : 500;
 
+      if (response?.isRateLimitReached) {
+        showErrorBox(
+          "Too many requests in a short time, please try again later."
+        );
+      }
+
       // Handle variations or single reply
       let variations = response.variations;
       if (!variations || !Array.isArray(variations)) {
@@ -856,7 +1030,7 @@ async function handleReplyGeneration(tone) {
         enforceCharacterLimit(reply, maxLength)
       );
 
-      console.log(`Generated ${processedVariations.length} variations`);
+      // console.log(`Generated ${processedVariations.length} variations`);
       showSuccessBox(processedVariations, response.remainingReplies);
     } else {
       const errorMessage = response?.error || "Unknown error occurred";
@@ -864,12 +1038,12 @@ async function handleReplyGeneration(tone) {
 
       // Trigger connectivity check when reply generation fails
       if (typeof window.checkConnectivity === "function") {
-        console.log("Reply failed, checking API connectivity...");
+        // console.log("Reply failed, checking API connectivity...");
         window
           .checkConnectivity()
           .then((result) => {
             if (!result.isOnline) {
-              console.log("API confirmed offline, starting polling");
+              // console.log("API confirmed offline, starting polling");
               updateApiStatus(false, "reply-failure-check");
               startOfflineStatusPolling();
             }
@@ -881,7 +1055,7 @@ async function handleReplyGeneration(tone) {
           });
       } else {
         // Fallback: Mark API as offline in storage for robust status propagation
-        console.log("Reply generation failed, marking API as offline");
+        // console.log("Reply generation failed, marking API as offline");
         await updateApiStatus(false, "reply-generation-failure");
         startOfflineStatusPolling();
       }
@@ -894,7 +1068,7 @@ async function handleReplyGeneration(tone) {
 
     // Handle timeout specifically
     if (error.message && error.message.includes("timed out")) {
-      console.log("Reply generation timed out, checking API connectivity...");
+      // console.log("Reply generation timed out, checking API connectivity...");
 
       // Trigger connectivity check when timeout occurs
       if (typeof window.checkConnectivity === "function") {
@@ -902,7 +1076,7 @@ async function handleReplyGeneration(tone) {
           .checkConnectivity()
           .then((result) => {
             if (!result.isOnline) {
-              console.log("API confirmed offline after timeout");
+              // console.log("API confirmed offline after timeout");
               updateApiStatus(false, "timeout-check");
               startOfflineStatusPolling();
             }
@@ -914,7 +1088,7 @@ async function handleReplyGeneration(tone) {
           });
       } else {
         // Fallback: Mark API as offline in storage
-        console.log("Reply generation timed out, marking API as offline");
+        // console.log("Reply generation timed out, marking API as offline");
         await updateApiStatus(false, "reply-timeout");
         startOfflineStatusPolling();
       }
@@ -932,108 +1106,118 @@ function handleSelection() {
     return;
   }
 
-  console.log("handleSelection triggered");
+  // console.log("handleSelection triggered");
   const selection = window.getSelection();
 
-  console.log("Selection details:", {
-    rangeCount: selection.rangeCount,
-    text: selection.toString(),
-    textLength: selection.toString().trim().length,
-  });
+  // console.log("Selection details:", { rangeCount: selection.rangeCount, text: selection.toString(), textLength: selection.toString().trim().length });
 
   if (selection.rangeCount > 0 && selection.toString().trim().length > 0) {
     selectedText = selection.toString().trim();
-    console.log("Text selected, showing button for:", selectedText);
+    // console.log("Text selected, showing button for:", selectedText);
     showReplyButton(selection);
   } else {
-    console.log("No text selected, hiding button");
+    // console.log("No text selected, hiding button");
     hideReplyButton();
   }
 }
 
 // Listen for storage changes to reload tones and settings when updated
 if (isChromeApiAvailable()) {
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === "local" && changes.humanreplies_tones_cache) {
-      console.log("Tones cache updated, reloading tones");
-      loadTonesFromStorage();
-    }
-
-    if (namespace === "local" && changes.humanreplies_api_status) {
-      // Ignore storage changes we caused ourselves to prevent feedback loops
-      if (isUpdatingApiStatus) {
-        console.log("[Context] Ignoring API status change (self-update)");
+  try {
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      // Check if context is still valid before processing changes
+      if (!isExtensionContextValid()) {
+        console.warn(
+          "Extension context invalidated during storage change event"
+        );
+        isExtensionContextInvalidated = true;
+        shutdownGracefully();
         return;
       }
 
-      const newStatus = changes.humanreplies_api_status.newValue;
-      const oldStatus = changes.humanreplies_api_status.oldValue;
-      
-      console.log("[Context] *** API STATUS CHANGED IN STORAGE ***");
-      console.log(`[Context] Old status: ${oldStatus?.isOnline ? 'online' : 'offline'} (source: ${oldStatus?.source || 'unknown'})`);
-      console.log(`[Context] New status: ${newStatus?.isOnline ? 'online' : 'offline'} (source: ${newStatus?.source || 'unknown'})`);
-      console.log(`[Context] New status object:`, newStatus);
-      
-      // Update local state immediately
-      if (newStatus && newStatus.isOnline !== isApiOnline) {
-        const wasOnline = isApiOnline;
-        isApiOnline = !!newStatus.isOnline;
-        
-        console.log(`[Context] *** UPDATING LOCAL STATE: ${wasOnline ? 'online' : 'offline'} → ${isApiOnline ? 'online' : 'offline'} ***`);
-        
-        // Update UI visibility based on new status
-        if (!shouldBeActive()) {
-          console.log("[Context] API went offline, hiding reply button and stopping features");
-          hideReplyButton();
-          if (toneMenu) {
-            toneMenu.remove();
-            toneMenu = null;
+      if (namespace === "local" && changes.humanreplies_tones_cache) {
+        // console.log("Tones cache updated, reloading tones");
+        loadTonesFromStorage();
+      }
+
+      if (namespace === "local" && changes.humanreplies_api_status) {
+        // Ignore storage changes we caused ourselves to prevent feedback loops
+        if (isUpdatingApiStatus) {
+          // console.log("[Context] Ignoring API status change (self-update)");
+          return;
+        }
+
+        const newStatus = changes.humanreplies_api_status.newValue;
+        const oldStatus = changes.humanreplies_api_status.oldValue;
+
+        // console.log("[Context] *** API STATUS CHANGED IN STORAGE ***");
+        // console.log(`[Context] Old status: ${oldStatus?.isOnline ? "online" : "offline"} (source: ${oldStatus?.source || "unknown"})`);
+        // console.log(`[Context] New status: ${newStatus?.isOnline ? "online" : "offline"} (source: ${newStatus?.source || "unknown"})`);
+        // console.log(`[Context] New status object:`, newStatus);
+
+        // Update local state immediately
+        if (newStatus && newStatus.isOnline !== isApiOnline) {
+          const wasOnline = isApiOnline;
+          isApiOnline = !!newStatus.isOnline;
+
+          // console.log(`[Context] *** UPDATING LOCAL STATE: ${wasOnline ? "online" : "offline"} → ${isApiOnline ? "online" : "offline"} ***`);
+
+          // Update UI visibility based on new status
+          if (!shouldBeActive()) {
+            // console.log("[Context] API went offline, hiding reply button and stopping features");
+            hideReplyButton();
+            if (toneMenu) {
+              toneMenu.remove();
+              toneMenu = null;
+            }
+            if (!wasOnline) {
+              // If was already offline, start polling for reconnection
+              startOfflineStatusPolling();
+            }
+          } else if (isApiOnline && !wasOnline) {
+            // console.log("[Context] API came back online, re-enabling features");
+            // Stop offline polling if it was running
+            if (offlineStatusInterval) {
+              clearInterval(offlineStatusInterval);
+              offlineStatusInterval = null;
+            }
+            // Re-initialize to enable features
+            initialize();
           }
-          if (!wasOnline) {
-            // If was already offline, start polling for reconnection
-            startOfflineStatusPolling();
-          }
-        } else if (isApiOnline && !wasOnline) {
-          console.log("[Context] API came back online, re-enabling features");
-          // Stop offline polling if it was running
-          if (offlineStatusInterval) {
-            clearInterval(offlineStatusInterval);
-            offlineStatusInterval = null;
-          }
-          // Re-initialize to enable features
-          initialize();
         }
       }
-    }
 
-    if (namespace === "sync" && changes.enableEverywhere) {
-      console.log("Enable everywhere setting changed, reloading");
-      loadEnableEverywhereSetting().then(() => {
-        // Hide reply button if setting changed and we're now on a restricted site
-        if (!shouldBeActive()) {
-          hideReplyButton();
-          if (toneMenu) {
-            toneMenu.remove();
-            toneMenu = null;
+      if (namespace === "sync" && changes.enableEverywhere) {
+        // console.log("Enable everywhere setting changed, reloading");
+        loadEnableEverywhereSetting().then(() => {
+          // Hide reply button if setting changed and we're now on a restricted site
+          if (!shouldBeActive()) {
+            hideReplyButton();
+            if (toneMenu) {
+              toneMenu.remove();
+              toneMenu = null;
+            }
           }
-        }
-      });
-    }
+        });
+      }
 
-    if (namespace === "sync" && changes.defaultTone) {
-      console.log("Default tone setting changed, reloading");
-      loadDefaultToneSetting().then(() => {
-        // Update arrow visibility on existing button
-        if (replyButton) {
-          if (defaultTone === "ask") {
-            replyButton.classList.add("show-arrow");
-          } else {
-            replyButton.classList.remove("show-arrow");
+      if (namespace === "sync" && changes.defaultTone) {
+        // console.log("Default tone setting changed, reloading");
+        loadDefaultToneSetting().then(() => {
+          // Update arrow visibility on existing button
+          if (replyButton) {
+            if (defaultTone === "ask") {
+              replyButton.classList.add("show-arrow");
+            } else {
+              replyButton.classList.remove("show-arrow");
+            }
           }
-        }
-      });
-    }
-  });
+        });
+      }
+    });
+  } catch (error) {
+    console.warn("Failed to set up storage change listener:", error);
+  }
 } else {
   console.warn("Chrome APIs not available, storage change listener not set up");
 }
@@ -1047,7 +1231,7 @@ async function startOfflineStatusPolling() {
   offlineStatusInterval = setInterval(async () => {
     await loadApiStatus();
     if (isApiOnline) {
-      console.log("Context.js: API reconnected, re-enabling features");
+      // console.log("Context.js: API reconnected, re-enabling features");
       clearInterval(offlineStatusInterval);
       offlineStatusInterval = null;
       initialize();
@@ -1056,7 +1240,7 @@ async function startOfflineStatusPolling() {
   }, 5000);
 }
 
-console.log("Adding event listeners");
+// console.log("Adding event listeners");
 document.addEventListener("mouseup", handleSelection);
 document.addEventListener("keyup", handleSelection);
 

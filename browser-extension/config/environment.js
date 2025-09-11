@@ -15,7 +15,7 @@ class EnvironmentConfig {
         },
       },
       production: {
-        apiBaseURL: "https://api.humanreplies.com/v1",
+        apiBaseURL: "https://api.humanreplies.com/api/v1",
         dashboardURL: "https://humanreplies.com/dashboard",
         debug: false,
         supabase: {
@@ -27,7 +27,7 @@ class EnvironmentConfig {
     };
 
     // Default environment - change this for different builds
-    this.currentEnvironment = "development";
+    this.currentEnvironment = "production";
 
     // Load persisted environment (local storage) – no auto production fallback
     this.loadEnvironment();
@@ -193,5 +193,5 @@ if (typeof window !== "undefined") {
   window.EnvironmentConfig = environmentConfig;
 }
 
-// ES module export
+// ES module export for background script
 export default environmentConfig;

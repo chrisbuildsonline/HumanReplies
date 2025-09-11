@@ -20,14 +20,6 @@ class HumanRepliesAPI {
     // Caching for service URLs
     this.serviceUrls = null;
     this.urlsCacheExpiry = null;
-
-    // Log initialization
-    console.log(
-      `HumanReplies API initialized with baseURL: ${this.baseURL || "(unset)"}`
-    );
-    console.log(
-      `HumanReplies API initialized with environment: ${this.environment}`
-    );
   }
 
   getBaseURL() {
@@ -35,11 +27,8 @@ class HumanRepliesAPI {
   }
 
   // ===== Internal helpers =====
-
   _debug(...args) {
-    if (typeof addVisibleDebug === "function") {
-      addVisibleDebug("[HumanRepliesAPI]", ...args);
-    } else if (this.debugMode) {
+    if (this.debugMode) {
       // eslint-disable-next-line no-console
       console.log("[HumanRepliesAPI]", ...args);
     }
@@ -74,19 +63,15 @@ class HumanRepliesAPI {
   }
 
   async generateReply(context, options = {}) {
-    // Check if config is loaded
     if (!this.baseURL) {
       throw new Error(
         "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
       );
     }
-
-    // Always use our backend now (no more fallback mode)
     return this.generateWithBackend(context, options);
   }
 
   async generateWithBackend(context, options = {}) {
-    // Generate reply using our FastAPI backend (which proxies to external services)
     try {
       const endpoint = `${this.baseURL}/services/generate-reply`;
       if (this.debugMode) {
@@ -140,14 +125,11 @@ class HumanRepliesAPI {
       // Prefer backend result
       let finalReply = data.generated_response;
       let serviceUsed = data.service_used || "backend";
+      let variations = null; // ensure scope outside conditional
 
       // If the backend didn't return a response but did return a prompt,
       // try Pollinations directly from the client
       if (!finalReply && data.generated_prompt) {
-        this._debug(
-          "Backend returned prompt but no response, using pollinations directly"
-        );
-
         const { pollinations_url: pollinationsUrl } =
           await this.getServiceUrls();
 
@@ -168,7 +150,15 @@ class HumanRepliesAPI {
         );
 
         if (!pollinationsResponse.ok) {
-          throw new Error("Failed to generate response from AI service");
+          // throw new Error(
+          //   "Too many requests to AI service, please try again later."
+          // );
+
+          return {
+            reply: null,
+            variations: null,
+            isRateLimitReached: true,
+          };
         }
 
         const rawReply = (await pollinationsResponse.text())
@@ -176,7 +166,6 @@ class HumanRepliesAPI {
           .replace(/^["']|["']$/g, "");
 
         // Try to parse JSON response with variations
-        let variations = null;
         try {
           const parsedResponse = JSON.parse(rawReply);
           if (
@@ -202,6 +191,7 @@ class HumanRepliesAPI {
         remainingReplies: data.remaining_replies ?? null,
         isLimitReached: data.is_limit_reached ?? false,
         serviceUsed,
+        isRateLimitReached: false,
         generatedPrompt: data.generated_prompt ?? null,
       };
     } catch (error) {
@@ -221,13 +211,6 @@ class HumanRepliesAPI {
         new Date() < this.urlsCacheExpiry
       ) {
         return this.serviceUrls;
-      }
-
-      if (this.debugMode) {
-        this._debug(
-          "Fetching service URLs from:",
-          `${this.baseURL}/services/urls`
-        );
       }
 
       const response = await fetch(`${this.baseURL}/services/urls`, {
@@ -250,10 +233,6 @@ class HumanRepliesAPI {
         ? new Date(data.cache_expires_at)
         : new Date(Date.now() + 60 * 60 * 1000); // 1 hour fallback
 
-      if (this.debugMode) {
-        this._debug("Service URLs updated:", data);
-      }
-
       return data;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -273,9 +252,6 @@ class HumanRepliesAPI {
   async getUserToken() {
     return new Promise((resolve) => {
       const finish = (token, phase) => {
-        if (this.debugMode) {
-          this._debug("[getUserToken] =>", { phase, tokenPresent: !!token });
-        }
         resolve(token || null);
       };
 
@@ -411,41 +387,22 @@ class HumanRepliesAPI {
 
   async getTones(options = {}) {
     // Get available tones from backend (includes user's custom tones if authenticated)
-    const t0 =
-      typeof performance !== "undefined" && performance.now
-        ? performance.now()
-        : Date.now();
-    const vdbg = (...args) => {
-      if (typeof addVisibleDebug === "function") {
-        addVisibleDebug("[getTones]", ...args);
-      } else if (this.debugMode) {
-        // eslint-disable-next-line no-console
-        console.log("[getTones]", ...args);
-      }
-    };
-
     try {
-      vdbg("start");
       const timeoutMs =
         typeof options.timeoutMs === "number" ? options.timeoutMs : 8000;
-      if (options.reason) vdbg("reason", options.reason);
 
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        vdbg("offline detected (navigator.onLine === false) -> fallback");
-        return this._fallbackTones(vdbg, "offline");
+        return [];
       }
 
       if (!this.baseURL) {
-        vdbg("baseURL missing -> fallback");
-        return this._fallbackTones(vdbg, "no baseURL configured");
+        return [];
       }
 
       const tonesUrl = `${this.baseURL}/tones/`;
-      vdbg("fetching", tonesUrl);
 
       // Get the token if available
       const userToken = await this.getUserToken();
-      vdbg("token present?", !!userToken);
 
       const headers = {
         "Content-Type": "application/json",
@@ -453,7 +410,6 @@ class HumanRepliesAPI {
       };
       if (userToken) {
         headers.Authorization = `Bearer ${userToken}`;
-        vdbg("auth header added");
       }
 
       const response = await this._fetchWithTimeout(
@@ -462,23 +418,14 @@ class HumanRepliesAPI {
         timeoutMs
       );
 
-      vdbg("status", response.status, response.statusText);
-
       if (!response.ok) {
         throw new Error(`Failed to fetch tones: ${response.status}`);
       }
 
       const data = await response.json().catch(() => ({}));
-      vdbg("response parsed (keys)", Object.keys(data || {}));
-
       const tones = Array.isArray(data.tones) ? data.tones : [];
-      const t1 =
-        typeof performance !== "undefined" && performance.now
-          ? performance.now()
-          : Date.now();
-      vdbg("returning", tones.length, "tones in", Math.round(t1 - t0) + "ms");
 
-      return tones.length ? tones : this._fallbackTones(vdbg, "empty response");
+      return tones.length ? tones : [];
     } catch (error) {
       const message = (error && error.message) || String(error);
 
@@ -574,63 +521,53 @@ class HumanRepliesAPI {
   }
 }
 
-// Global connectivity function that can be called from anywhere
-window.checkConnectivity = async function () {
-  try {
-    // Use window.EnvironmentConfig if available
-    const envConfig = window.EnvironmentConfig || null;
-    const api = new HumanRepliesAPI(envConfig);
-
-    const result = await api.checkConnectivity();
-
-    // Update API status in chrome storage
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.storage &&
-      chrome.storage.local
-    ) {
-      chrome.storage.local.set({
-        humanreplies_api_status: {
-          isOnline: result.isOnline,
-          lastChecked: Date.now(),
-          error: result.error || null,
-        },
-      });
+// Global connectivity function that can be called from anywhere (guarded)
+if (typeof window !== "undefined") {
+  window.checkConnectivity = async function () {
+    try {
+      const envConfig = window.EnvironmentConfig || null;
+      const api = new HumanRepliesAPI(envConfig);
+      const result = await api.checkConnectivity();
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.local
+      ) {
+        chrome.storage.local.set({
+          humanreplies_api_status: {
+            isOnline: result.isOnline,
+            lastChecked: Date.now(),
+            error: result.error || null,
+          },
+        });
+      }
+      return result;
+    } catch (error) {
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.local
+      ) {
+        chrome.storage.local.set({
+          humanreplies_api_status: {
+            isOnline: false,
+            lastChecked: Date.now(),
+            error: error.message || "Connectivity check failed",
+          },
+        });
+      }
+      return {
+        isOnline: false,
+        error: error.message || "Connectivity check failed",
+      };
     }
+  };
+}
 
-    console.log(
-      "[checkConnectivity] API status:",
-      result.isOnline ? "online" : "offline",
-      result.error || ""
-    );
-    return result;
-  } catch (error) {
-    console.error(
-      "[checkConnectivity] Failed to check API connectivity:",
-      error
-    );
+// Make HumanRepliesAPI available globally for content scripts
+if (typeof window !== "undefined") {
+  window.HumanRepliesAPI = HumanRepliesAPI;
+}
 
-    // Set offline status on error
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.storage &&
-      chrome.storage.local
-    ) {
-      chrome.storage.local.set({
-        humanreplies_api_status: {
-          isOnline: false,
-          lastChecked: Date.now(),
-          error: error.message || "Connectivity check failed",
-        },
-      });
-    }
-
-    return {
-      isOnline: false,
-      error: error.message || "Connectivity check failed",
-    };
-  }
-};
-
-// ES module export
+// ES module export for background script
 export default HumanRepliesAPI;

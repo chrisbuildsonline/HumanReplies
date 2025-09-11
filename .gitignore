@@ -29,3 +29,10 @@ extension/icons/*.png
 .next
 
 frontend
+
+browser-extension/build.js
+browser-extension/dist
+browser-extension/package.json
+browser-extension/package-lock.json
+
+*.zip

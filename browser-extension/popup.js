@@ -3,102 +3,30 @@ import HumanRepliesAPI from "./core/api-service.js";
 import SupabaseClient from "./supabase-client.js";
 import AuthManager from "./auth-manager.js";
 
-console.log("[Popup] Script file loaded");
-console.log("[Popup] Starting popup.js execution...");
-console.log("[Popup] DOM ready state:", document.readyState);
-
-addVisibleDebug("[Popup] script file loaded");
-addVisibleDebug("[Popup] Starting popup.js execution...");
-
-// Add visible debug info to the page
-function addVisibleDebug(...parts) {
-  try {
-    const debugArea = document.getElementById("debugArea");
-    if (!debugArea) {
-      console.log("[DEBUG-NO-AREA]", ...parts);
-      return;
-    }
-
-    debugArea.style.display = "block";
-    const timestamp = new Date().toLocaleTimeString();
-    const message = parts
-      .map((p) => {
-        if (typeof p === "object" && p !== null) {
-          try {
-            return JSON.stringify(p, null, 1);
-          } catch {
-            return String(p);
-          }
-        }
-        return String(p);
-      })
-      .join(" ");
-
-    // Clear placeholder text on first real message
-    if (debugArea.textContent.includes("Debug output will appear here")) {
-      debugArea.textContent = "";
-    }
-
-    debugArea.textContent += `[${timestamp}] ${message}\n`;
-    debugArea.scrollTop = debugArea.scrollHeight;
-
-    // Also log to console with more detail
-    console.log("[DEBUG]", timestamp, ...parts);
-  } catch (e) {
-    console.error("[DEBUG ERROR]", e);
-    console.log("[DEBUG FALLBACK]", ...parts);
-  }
-}
-
-function appendDebug(message) {
-  try {
-    const box = document.getElementById("debugArea");
-    if (!box) return;
-    box.style.display = "block";
-    const ts = new Date().toLocaleTimeString();
-    box.textContent += `[${ts}] ${message}
-`;
-  } catch (e) {}
-}
 class PopupManager {
   constructor() {
-    addVisibleDebug("[Constructor] PopupManager constructor starting");
     this.isLoggedIn = false;
     this.currentUser = null;
     this.currentTone = "ask";
     this.api = null;
-    this.isApiOnline = false; // Track API status
-    this.apiStatusChecked = false; // Track if we've checked API status
-    this.isOnSupportedSite = null; // Track if current site is supported (null = not checked yet)
-    this.useIntegrations = true; // default ON
-    this.enableSelectReply = true; // default ON
-    this.enableEverywhere = false; // default OFF (social media only)
-    this.offlineRetryInterval = null; // Track auto-retry interval when offline
+    this.isApiOnline = false;
+    this.apiStatusChecked = false;
+    this.isOnSupportedSite = null;
+    this.useIntegrations = true;
+    this.enableSelectReply = true;
+    this.enableEverywhere = false;
+    this.offlineRetryInterval = null;
 
-    addVisibleDebug(
-      `[Constructor] Initial state: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
-    );
-
-    // Initialize async - load API status first, then initialize components
     this.initializeAsync();
   }
 
   async initializeAsync() {
     try {
-      addVisibleDebug("[InitAsync] Starting async initialization");
-
-      // Load API status first to ensure UI can show offline state immediately
       await this.loadApiStatus();
-      addVisibleDebug(
-        `[InitAsync] API status loaded: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
-      );
-
-      // Then initialize other components
       await this.initializeApi();
       this.initializeOtherComponents();
     } catch (error) {
-      addVisibleDebug("[InitAsync] Initialization error:", error);
-      // Continue with initialization even if API status fails
+      console.error("Initialization error:", error);
       this.initializeApi();
       this.initializeOtherComponents();
     }
@@ -106,54 +34,20 @@ class PopupManager {
 
   async initializeApi() {
     try {
-      addVisibleDebug("Before HumanRepliesAPI created");
-
-      // Get environment config and initialize API service
       const envConfig = window.EnvironmentConfig;
-      addVisibleDebug("EnvironmentConfig check:", {
-        exists: !!envConfig,
-        type: typeof envConfig,
-        constructor: envConfig?.constructor?.name,
-      });
 
       if (envConfig) {
         await envConfig.loadEnvironment();
-        const config = envConfig.getConfig();
-        addVisibleDebug("Environment config loaded:", {
-          environment: envConfig.getCurrentEnvironment(),
-          apiBaseURL: config.apiBaseURL,
-          debug: config.debug,
-        });
-
         this.api = new HumanRepliesAPI(envConfig);
-        addVisibleDebug(
-          "After HumanRepliesAPI created with environment config"
-        );
       } else {
-        addVisibleDebug("WARNING: No EnvironmentConfig found, using fallback");
         this.api = new HumanRepliesAPI();
-        addVisibleDebug(
-          "After HumanRepliesAPI created without environment config"
-        );
-      } // Log final API configuration
-      if (this.api) {
-        addVisibleDebug("Final API config:", {
-          baseURL: this.api.getBaseURL(),
-          environment: this.api.environment,
-          debugMode: this.api.debugMode,
-        });
       }
 
-      // Start early pre-load of tones after API is ready
       this.preloadTones();
-
-      // Start periodic API status checking (every 30 seconds)
       this.startApiStatusChecking();
-
-      // Set up storage listener to update UI when background updates status
       this.setupStorageListener();
     } catch (e) {
-      addVisibleDebug("HumanRepliesAPI error: " + e.message);
+      console.error("API initialization error:", e.message);
       this.isApiOnline = false;
       this.apiStatusChecked = true;
       this.updateExtensionStatus();
@@ -161,31 +55,18 @@ class PopupManager {
   }
 
   startApiStatusChecking() {
-    // Check API status every 30 seconds
     setInterval(() => {
       this.checkApiStatus();
     }, 30000);
   }
 
   setupStorageListener() {
-    // Listen for storage changes from background script
     if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
       chrome.storage.onChanged.addListener((changes, namespace) => {
         if (namespace === "local" && changes.humanreplies_api_status) {
           const newStatus = changes.humanreplies_api_status.newValue;
-          const oldStatus = changes.humanreplies_api_status.oldValue;
 
           if (newStatus && newStatus.isOnline !== this.isApiOnline) {
-            addVisibleDebug(
-              `[StorageListener] API status changed: ${
-                oldStatus?.isOnline ? "online" : "offline"
-              } → ${newStatus.isOnline ? "online" : "offline"}`
-            );
-
-            addVisibleDebug(`[StorageListener] *** STORAGE CHANGED API STATUS ***`);
-            addVisibleDebug(`[StorageListener] Source: ${newStatus.source || 'unknown'}`);
-            addVisibleDebug(`[StorageListener] Setting isApiOnline from ${this.isApiOnline} to ${newStatus.isOnline}`);
-            
             this.isApiOnline = newStatus.isOnline;
             this.apiStatusChecked = true;
             this.updateExtensionStatus();
@@ -196,7 +77,6 @@ class PopupManager {
           }
         }
       });
-      addVisibleDebug("[StorageListener] Storage change listener set up");
     }
   }
 
@@ -206,37 +86,17 @@ class PopupManager {
       this.apiStatusChecked = true;
       this.saveApiStatus();
       this.updateExtensionStatus();
-      addVisibleDebug("[CheckAPI] No API instance available");
       return;
     }
 
     const wasOnline = this.isApiOnline;
-    const refreshType = isManualRefresh ? "Manual Refresh" : "StatusCheck";
-
-    // Log detailed API info
-    addVisibleDebug(`[${refreshType}] Starting API check...`);
-    addVisibleDebug(`[${refreshType}] API baseURL:`, this.api.getBaseURL());
-    addVisibleDebug(`[${refreshType}] Environment:`, this.api.environment);
 
     try {
-      // Use instance checkConnectivity method if available, otherwise fall back to getTones
       if (typeof this.api.checkConnectivity === "function") {
-        addVisibleDebug(
-          `[${refreshType}] Using instance checkConnectivity method`
-        );
         const result = await this.api.checkConnectivity();
         this.isApiOnline = result.isOnline;
 
-        if (result.error) {
-          addVisibleDebug(
-            `[${refreshType}] Connectivity check error:`,
-            result.error
-          );
-        }
-
-        // If API is online, also load tones to refresh data
         if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
-          addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
           const tones = await this.api.getTones({
             timeoutMs: isManualRefresh ? 5000 : 3000,
             reason: isManualRefresh ? "manual-refresh" : "status-check",
@@ -248,22 +108,10 @@ class PopupManager {
           }
         }
       } else if (typeof window.checkConnectivity === "function") {
-        addVisibleDebug(
-          `[${refreshType}] Using global checkConnectivity function`
-        );
         const result = await window.checkConnectivity();
         this.isApiOnline = result.isOnline;
 
-        if (result.error) {
-          addVisibleDebug(
-            `[${refreshType}] Connectivity check error:`,
-            result.error
-          );
-        }
-
-        // If API is online, also load tones to refresh data
         if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
-          addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
           const tones = await this.api.getTones({
             timeoutMs: isManualRefresh ? 5000 : 3000,
             reason: isManualRefresh ? "manual-refresh" : "status-check",
@@ -275,26 +123,14 @@ class PopupManager {
           }
         }
       } else {
-        // Fallback to original getTones method
-        addVisibleDebug(
-          `[${refreshType}] Using getTones for connectivity check`
-        );
         const tones = await this.api.getTones({
           timeoutMs: isManualRefresh ? 5000 : 3000,
           reason: isManualRefresh ? "manual-refresh" : "status-check",
         });
 
-        addVisibleDebug(`[${refreshType}] API response:`, {
-          tonesReceived: tones ? tones.length : 0,
-          isArray: Array.isArray(tones),
-          firstTone: tones && tones[0] ? tones[0].name : "none",
-        });
-
         this.isApiOnline = tones && tones.length > 0;
 
-        // If API came back online, reload tones
         if (!wasOnline && this.isApiOnline) {
-          addVisibleDebug("[StatusCheck] API restored, reloading tones...");
           this.allTones = tones;
           await this.loadTones();
           if (this.isLoggedIn) {
@@ -302,18 +138,8 @@ class PopupManager {
           }
         }
       }
-
-      addVisibleDebug(
-        `[${refreshType}] API is`,
-        this.isApiOnline ? "online" : "offline"
-      );
     } catch (err) {
       this.isApiOnline = false;
-      addVisibleDebug(`[${refreshType}] API error:`, {
-        message: err.message,
-        name: err.name,
-        stack: err.stack ? err.stack.substring(0, 200) + "..." : "no stack",
-      });
     }
 
     this.apiStatusChecked = true;
@@ -322,216 +148,87 @@ class PopupManager {
   }
 
   saveApiStatus() {
-    // Save API status directly to Chrome storage (popup is authoritative for status updates)
     if (typeof chrome !== "undefined" && chrome.storage) {
       try {
         const statusUpdate = {
-          isOnline: !!this.isApiOnline, // Ensure boolean
+          isOnline: !!this.isApiOnline,
           lastChecked: Date.now(),
           source: "popup",
           checkedAt: new Date().toISOString(),
         };
 
-        addVisibleDebug(`[StatusSave] *** SAVING DIRECTLY TO STORAGE ***`);
-        addVisibleDebug(`[StatusSave] Status object:`, statusUpdate);
-        addVisibleDebug(
-          `[StatusSave] isOnline value: ${
-            statusUpdate.isOnline
-          } (type: ${typeof statusUpdate.isOnline})`
-        );
-
-        chrome.storage.local.set(
-          { humanreplies_api_status: statusUpdate },
-          () => {
-            if (chrome.runtime.lastError) {
-              addVisibleDebug(
-                "[StatusSave] *** STORAGE ERROR ***:",
-                chrome.runtime.lastError.message
-              );
-            } else {
-              addVisibleDebug(
-                `[StatusSave] *** STORAGE SUCCESS *** API status saved: ${
-                  statusUpdate.isOnline ? "ONLINE" : "OFFLINE"
-                }`
-              );
-              addVisibleDebug(
-                `[StatusSave] Timestamp: ${statusUpdate.lastChecked}`
-              );
-
-              // Verify the save worked by immediately reading it back
-              chrome.storage.local.get(
-                ["humanreplies_api_status"],
-                (result) => {
-                  addVisibleDebug("[StatusSave] *** VERIFICATION READ ***:");
-                  addVisibleDebug(
-                    `[StatusSave] Read back from storage:`,
-                    result
-                  );
-                  if (result.humanreplies_api_status) {
-                    addVisibleDebug(
-                      `[StatusSave] Verified isOnline: ${result.humanreplies_api_status.isOnline}`
-                    );
-                  } else {
-                    addVisibleDebug(
-                      "[StatusSave] *** WARNING: Could not read back saved status! ***"
-                    );
-                  }
-                }
-              );
-            }
-          }
-        );
+        chrome.storage.local.set({ humanreplies_api_status: statusUpdate });
       } catch (e) {
-        addVisibleDebug(
-          "[StatusSave] *** EXCEPTION SAVING TO STORAGE ***:",
-          e.message
-        );
+        console.error("Failed to save API status:", e.message);
       }
-    } else {
-      addVisibleDebug("[StatusSave] *** Chrome storage not available! ***");
     }
   }
 
   async loadApiStatus() {
-    addVisibleDebug("[LoadAPIStatus] === LOADING API STATUS FROM STORAGE ===");
-
-    // First, let's see what's actually in ALL of Chrome storage
     try {
-      addVisibleDebug("[LoadAPIStatus] Checking ALL Chrome local storage contents...");
-      const allStorage = await new Promise((resolve) => {
-        if (typeof chrome !== "undefined" && chrome.storage) {
-          chrome.storage.local.get(null, (result) => {
-            resolve(result);
-          });
-        } else {
-          resolve({});
-        }
-      });
-      addVisibleDebug("[LoadAPIStatus] ALL storage contents:", allStorage);
-      addVisibleDebug("[LoadAPIStatus] Storage keys:", Object.keys(allStorage));
-      
-      // Now specifically get the humanreplies_api_status
       const result = await new Promise((resolve, reject) => {
         if (typeof chrome !== "undefined" && chrome.storage) {
-          addVisibleDebug("[LoadAPIStatus] Chrome storage available, getting humanreplies_api_status");
           chrome.storage.local.get(["humanreplies_api_status"], (result) => {
             if (chrome.runtime.lastError) {
-              addVisibleDebug("[LoadAPIStatus] Chrome error:", chrome.runtime.lastError.message);
               reject(chrome.runtime.lastError);
             } else {
-              addVisibleDebug("[LoadAPIStatus] Chrome storage result:", result);
               resolve(result);
             }
           });
         } else {
-          addVisibleDebug("[LoadAPIStatus] Chrome storage not available");
           resolve({});
         }
       });
 
-      addVisibleDebug(`[LoadAPIStatus] Checking if result.humanreplies_api_status exists:`, !!result.humanreplies_api_status);
-      addVisibleDebug(`[LoadAPIStatus] Result object keys:`, Object.keys(result));
-      
       if (result.humanreplies_api_status) {
         const status = result.humanreplies_api_status;
         const age = Date.now() - (status.lastChecked || 0);
-        const isRecent = age < 30000; // 30 seconds
-        
-        addVisibleDebug(`[LoadAPIStatus] *** FOUND EXISTING STATUS IN STORAGE ***`);
-        addVisibleDebug(`[LoadAPIStatus] Status object:`, status);
-        addVisibleDebug(`[LoadAPIStatus] isOnline value:`, status.isOnline, `(type: ${typeof status.isOnline})`);
-        addVisibleDebug(`[LoadAPIStatus] Status age: ${age}ms, isRecent: ${isRecent}`);
+        const isRecent = age < 30000;
 
-        // Always use the cached status as initial state, regardless of age
-        this.isApiOnline = !!status.isOnline; // Ensure boolean
+        this.isApiOnline = !!status.isOnline;
         this.apiStatusChecked = true;
-        
-        addVisibleDebug(
-          `[LoadAPIStatus] *** SETTING INITIAL STATE FROM STORAGE: ${this.isApiOnline ? 'ONLINE' : 'OFFLINE'} ***`
-        );
-        
         this.updateExtensionStatus();
-        
-        if (isRecent) {
-          addVisibleDebug(`[LoadAPIStatus] Status is recent (${Math.round(age/1000)}s old), no background check needed`);
-          return;
-        } else {
-          addVisibleDebug(
-            `[LoadAPIStatus] Status is stale (${Math.round(age/1000)}s old), requesting background refresh but keeping current UI`
-          );
-          // Don't change the UI state here - let background update it if status changes
+
+        if (!isRecent) {
+          this.requestBackgroundRefresh();
         }
       } else {
-        addVisibleDebug(
-          "[LoadAPIStatus] *** NO CACHED STATUS FOUND - DEFAULTING TO OFFLINE ***"
-        );
-        addVisibleDebug(`[LoadAPIStatus] Result was:`, result);
         this.isApiOnline = false;
         this.apiStatusChecked = true;
-        
-        // IMPORTANT: Save offline status to storage so other components know about it
-        addVisibleDebug("[LoadAPIStatus] *** SAVING OFFLINE STATUS TO STORAGE ***");
         this.saveApiStatus();
-        
         this.updateExtensionStatus();
       }
     } catch (err) {
-      addVisibleDebug("[LoadAPIStatus] Error loading cached status:", err.message);
-      // Assume offline if we can't read storage
       this.isApiOnline = false;
       this.apiStatusChecked = true;
-      
-      // IMPORTANT: Save offline status to storage so other components know about it
-      addVisibleDebug("[LoadAPIStatus] *** SAVING OFFLINE STATUS TO STORAGE (ERROR CASE) ***");
       this.saveApiStatus();
-      
       this.updateExtensionStatus();
     }
-    
-    // Ask background script to perform fresh check (but don't wait for it)
+  }
+
+  requestBackgroundRefresh() {
     if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
       try {
-        addVisibleDebug("[LoadAPIStatus] Requesting background connectivity refresh (async)");
-        chrome.runtime.sendMessage({ action: "refreshConnectivity" }, (response) => {
-          addVisibleDebug("[LoadAPIStatus] Background response:", response);
-          if (response && response.success) {
-            addVisibleDebug("[LoadAPIStatus] Background refresh initiated successfully");
-          }
-        });
+        chrome.runtime.sendMessage({ action: "refreshConnectivity" });
       } catch (e) {
-        addVisibleDebug("[LoadAPIStatus] Failed to request background refresh:", e.message);
+        console.error("Failed to request background refresh:", e.message);
       }
     }
   }
 
   async preloadTones() {
-    // Early pre-load of tones (non-blocking) AFTER api is initialized
     try {
-      addVisibleDebug("[EarlyTones] Calling api.getTones()...");
       if (!this.api) {
-        addVisibleDebug("[EarlyTones] API not ready yet");
         this.isApiOnline = false;
         this.apiStatusChecked = true;
         this.saveApiStatus();
-        this.updateExtensionStatus(); // Update UI with offline status
+        this.updateExtensionStatus();
         return;
       }
 
-      // Check if we have cached tones first
       const cachedTones = await this.getCachedTones();
       if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
-        addVisibleDebug(
-          "[EarlyTones] Using cached tones:",
-          cachedTones.tones.length
-        );
         this.allTones = cachedTones.tones;
-
-        addVisibleDebug("[EarlyTones] *** CACHED TONES FOUND - BUT NOT SETTING API ONLINE ***");
-        addVisibleDebug("[EarlyTones] Cached tones only mean we have offline fallback data, not that API is online");
-        addVisibleDebug(`[EarlyTones] Current API status: ${this.isApiOnline ? 'online' : 'offline'}, checked: ${this.apiStatusChecked}`);
-        
-        // DO NOT set API online based on cached tones - cached tones are fallback data
-        // The background script will determine actual API connectivity
         return;
       }
 
@@ -539,39 +236,27 @@ class PopupManager {
         timeoutMs: 2000,
         reason: "early-preload",
       });
-      addVisibleDebug("[EarlyTones] Received tones count:", tones.length);
       this.allTones = tones;
 
-      // Cache the tones
       await this.cacheTones(tones);
 
-      // Only set online status if not already checked, or if we successfully got fresh tones
       if (!this.apiStatusChecked || tones.length > 0) {
-        addVisibleDebug("[EarlyTones] *** SETTING API ONLINE BASED ON FRESH TONES ***");
-        addVisibleDebug(`[EarlyTones] apiStatusChecked: ${this.apiStatusChecked}, tones.length: ${tones.length}`);
-        addVisibleDebug("[EarlyTones] This should only happen if we successfully fetched fresh tones from API!");
         this.isApiOnline = true;
         this.apiStatusChecked = true;
         this.saveApiStatus();
-        this.updateExtensionStatus(); // Update UI with online status
+        this.updateExtensionStatus();
       }
     } catch (err) {
-      addVisibleDebug("[EarlyTones] Error fetching tones:", err.message);
-
-      // Try to use cached tones as fallback
       const cachedTones = await this.getCachedTones();
       if (cachedTones) {
-        addVisibleDebug("[EarlyTones] Using cached tones as fallback");
         this.allTones = cachedTones.tones;
       }
 
-      // Only override status if not already checked, or if this confirms offline status
       if (!this.apiStatusChecked || !this.isApiOnline) {
-        addVisibleDebug("[EarlyTones] Setting API offline due to error");
         this.isApiOnline = false;
         this.apiStatusChecked = true;
         this.saveApiStatus();
-        this.updateExtensionStatus(); // Update UI with offline status
+        this.updateExtensionStatus();
       }
     }
   }
@@ -583,7 +268,6 @@ class PopupManager {
       });
       return result.humanreplies_tones_cache || null;
     } catch (err) {
-      addVisibleDebug("[Cache] Error getting cached tones:", err.message);
       return null;
     }
   }
@@ -608,10 +292,8 @@ class PopupManager {
           }
         );
       });
-
-      addVisibleDebug("[Cache] Tones cached successfully");
     } catch (err) {
-      addVisibleDebug("[Cache] Error caching tones:", err.message);
+      console.error("Error caching tones:", err.message);
     }
   }
 
@@ -622,97 +304,65 @@ class PopupManager {
     const cacheAge = now - cachedData.cachedAt;
     const twentyFourHours = 24 * 60 * 60 * 1000;
 
-    // If user is logged in, always refresh (they might have new custom tones)
     if (this.isLoggedIn) {
-      addVisibleDebug("[Cache] Logged in user - forcing refresh");
       return true;
     }
 
-    // If cache is older than 24 hours, refresh
     if (cacheAge > twentyFourHours) {
-      addVisibleDebug("[Cache] Cache expired (24h+) - refreshing");
       return true;
     }
 
-    // If login state changed since cache, refresh
     if (cachedData.isLoggedIn !== this.isLoggedIn) {
-      addVisibleDebug("[Cache] Login state changed - refreshing");
       return true;
     }
 
-    addVisibleDebug(
-      "[Cache] Using cached tones (age: " +
-        Math.round(cacheAge / 1000 / 60) +
-        " minutes)"
-    );
     return false;
   }
 
   initializeOtherComponents() {
     try {
       this.supabase = new SupabaseClient();
-      addVisibleDebug("SupabaseClient created");
     } catch (e) {
-      addVisibleDebug("SupabaseClient error: " + e.message);
+      console.error("SupabaseClient error:", e.message);
     }
 
     try {
       this.authManager = new AuthManager();
-      addVisibleDebug("AuthManager created");
     } catch (e) {
-      addVisibleDebug("AuthManager error: " + e.message);
+      console.error("AuthManager error:", e.message);
     }
 
-    addVisibleDebug("About to call init()");
     this.init();
   }
 
   async init() {
-    addVisibleDebug("[Popup] init start");
-
-    // First check for userState (new auth flow) - this takes priority
     await this.checkUserStateAuth();
 
-    // Fallback to robust auth manager if no userState found
     if (!this.isLoggedIn) {
-      let isAuthenticated = false;
       try {
-        isAuthenticated = await this.authManager.checkAuthStatus();
+        await this.authManager.checkAuthStatus();
+        const authState = this.authManager.getAuthState();
+        this.isLoggedIn = authState.isLoggedIn;
+        this.currentUser = authState.currentUser;
       } catch (e) {
-        addVisibleDebug("[Popup] authManager.checkAuthStatus threw", e);
+        console.error("Auth check failed:", e);
       }
-      const authState = this.authManager.getAuthState();
-      this.isLoggedIn = authState.isLoggedIn;
-      this.currentUser = authState.currentUser;
     }
-
-    addVisibleDebug(
-      "Auth check completed - isLoggedIn:",
-      this.isLoggedIn,
-      "currentUser:",
-      this.currentUser
-    ); // Debug logging
 
     this.checkCurrentSite();
 
-    addVisibleDebug("[Popup] About to call loadTones()...");
     try {
       await this.loadTones();
-      addVisibleDebug("[Popup] loadTones() completed");
     } catch (error) {
-      addVisibleDebug("[Popup] loadTones() failed:", error);
+      console.error("Load tones failed:", error);
     }
 
     this.updateUIState();
     this.loadToneSetting();
     this.setupEventListeners();
-
-    // Show the popup content after login check is complete
     this.showPopupContent();
 
-    // Set up periodic auth check using the auth manager
     this.authManager.startPeriodicCheck((isLoggedIn, currentUser) => {
-      addVisibleDebug("Auth state changed:", isLoggedIn, currentUser);
       this.isLoggedIn = isLoggedIn;
       this.currentUser = currentUser;
       this.updateUIState();
@@ -724,45 +374,32 @@ class PopupManager {
       }
     });
 
-    addVisibleDebug("[Popup] init complete");
-
-    // Clean up when popup is closed
     window.addEventListener("beforeunload", () => {
       this.cleanup();
     });
   }
 
-  // Check userState (new auth flow) and validate tokens directly with Supabase
   async checkUserStateAuth() {
     return new Promise((resolve) => {
       chrome.storage.local.get(["userState"], async (result) => {
         const userState = result.userState;
         if (!userState || !userState.access_token) {
-          addVisibleDebug("[Popup] No userState found");
           return resolve(false);
         }
 
-        addVisibleDebug("[Popup] Found userState, validating token...");
-
-        // Check if token is expired (basic check)
         if (userState.expires_in && userState.storedAt) {
           const expiryTime = userState.storedAt + userState.expires_in * 1000;
           if (Date.now() >= expiryTime) {
-            addVisibleDebug("[Popup] Token expired, clearing userState");
             chrome.storage.local.remove(["userState"]);
             return resolve(false);
           }
         }
 
-        // Validate token directly with Supabase (bypass our backend)
         try {
           const userInfo = await this.supabase.getUserInfo(
             userState.access_token
           );
           if (userInfo && userInfo.email) {
-            addVisibleDebug("[Popup] Token valid, setting logged in state");
-
-            // Update state from validated userInfo
             this.isLoggedIn = true;
             this.currentUser = {
               id: userInfo.id,
@@ -774,7 +411,6 @@ class PopupManager {
               created_at: userInfo.created_at,
             };
 
-            // Sync with AuthManager for consistency
             const authDataWithProfile = {
               access_token: userState.access_token,
               refresh_token: userState.refresh_token,
@@ -788,8 +424,6 @@ class PopupManager {
             throw new Error("Invalid user info response");
           }
         } catch (error) {
-          addVisibleDebug("[Popup] Token validation failed:", error.message);
-          // Clear invalid userState
           chrome.storage.local.remove(["userState"]);
           resolve(false);
         }
@@ -797,7 +431,6 @@ class PopupManager {
     });
   }
 
-  // Cleanup method for when popup is closed
   cleanup() {
     if (this.authManager) {
       this.authManager.stopPeriodicCheck();
@@ -808,82 +441,23 @@ class PopupManager {
     }
   }
 
-  // Manual refresh method for debugging
-  async refreshAuthState() {
-    addVisibleDebug("Manual auth refresh triggered using AuthManager");
-
-    // Use auth manager to check status
-    const isAuthenticated = await this.authManager.checkAuthStatus();
-    const authState = this.authManager.getAuthState();
-
-    addVisibleDebug("AuthManager check result:", isAuthenticated, authState);
-
-    // Update local state
-    this.isLoggedIn = authState.isLoggedIn;
-    this.currentUser = authState.currentUser;
-
-    this.updateUIState();
-
-    chrome.storage.local.get(null, (all) => {
-      const userState = all.userState;
-      addVisibleDebug(
-        "[Debug refresh] chrome.storage.local keys:",
-        Object.keys(all)
-      );
-      if (userState) {
-        addVisibleDebug("[Debug refresh] userState:", userState);
-        const { userProfile, access_token } = userState;
-        const shortToken = access_token
-          ? access_token.substring(0, 6) + "…" + access_token.slice(-4)
-          : "none";
-        this.showSuccess(
-          `userState: ${userProfile?.email || "n/a"} token ${shortToken}`
-        );
-
-        // Force re-check userState auth on debug refresh
-        this.checkUserStateAuth().then((isValid) => {
-          if (isValid && !this.isLoggedIn) {
-            addVisibleDebug("[Debug] userState was valid, updating UI");
-            this.updateUIState();
-          }
-        });
-      } else {
-        this.showError("userState: n/a token none");
-      }
-    });
-
-    if (this.isLoggedIn) {
-      await this.loadTones();
-      this.loadCustomTones();
-      this.showSuccess("Auth state refreshed - logged in!");
-    } else {
-      this.showError("Auth state refreshed - not logged in");
-    }
-  }
-
   async checkAuthStatus() {
-    // Delegate entirely to AuthManager for consistency
     try {
       const wasLoggedIn = this.isLoggedIn;
-      const result = await this.authManager.checkAuthStatus();
+      await this.authManager.checkAuthStatus();
       const authState = this.authManager.getAuthState();
       this.isLoggedIn = authState.isLoggedIn;
       this.currentUser = authState.currentUser;
-      addVisibleDebug(
-        "Popup.checkAuthStatus via AuthManager =>",
-        this.isLoggedIn,
-        this.currentUser
-      );
+
       if (wasLoggedIn !== this.isLoggedIn) {
         this.updateUIState();
       }
     } catch (e) {
-      addVisibleDebug("Delegated auth check failed", e);
+      console.error("Auth check failed:", e);
     }
   }
 
   checkCurrentSite() {
-    // Get current tab to check if extension is active
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
         const url = new URL(tabs[0].url);
@@ -906,12 +480,10 @@ class PopupManager {
   }
 
   updateExtensionStatus() {
-    // Get all status elements using classes
     const statusTextElements = document.querySelectorAll(".status-text");
     const statusIndicators = document.querySelectorAll(".status-indicator");
     const statusContainers = document.querySelectorAll(".extensionStatus");
 
-    // Get elements to show/hide based on API status
     const apiOfflineMessage = document.getElementById("api-offline-message");
     const loggedOutState = document.getElementById("loggedOutState");
     const loggedInState = document.getElementById("loggedInState");
@@ -921,91 +493,49 @@ class PopupManager {
       !statusIndicators.length ||
       !statusContainers.length
     ) {
-      return; // Elements not ready yet
+      return;
     }
 
     let statusText = "";
     let isActive = false;
 
-    // Priority: API status first, then site support
-    addVisibleDebug(
-      `[UpdateStatus] Checking condition: apiStatusChecked=${
-        this.apiStatusChecked
-      } && !isApiOnline=${!this.isApiOnline}`
-    );
-
     if (this.apiStatusChecked && !this.isApiOnline) {
       statusText = "HumanReplies API is offline";
       isActive = false;
 
-      addVisibleDebug(
-        `[UpdateStatus] *** CONDITION MET: Showing offline state ***`
-      );
-
-      // Show API offline message and hide other content
       if (apiOfflineMessage) {
-        addVisibleDebug(
-          `[UpdateStatus] Removing 'hidden' class from offline message`
-        );
         apiOfflineMessage.classList.remove("hidden");
-        addVisibleDebug(
-          `[UpdateStatus] Offline message classes after remove: "${apiOfflineMessage.className}"`
-        );
-        addVisibleDebug(
-          `[UpdateStatus] Offline message display style: "${
-            getComputedStyle(apiOfflineMessage).display
-          }"`
-        );
-      } else {
-        addVisibleDebug(
-          `[UpdateStatus] *** ERROR: apiOfflineMessage element not found! ***`
-        );
       }
 
       if (loggedOutState) {
         loggedOutState.classList.add("hidden");
-        addVisibleDebug(`[UpdateStatus] Hid logged out state`);
       }
       if (loggedInState) {
         loggedInState.classList.add("hidden");
-        addVisibleDebug(`[UpdateStatus] Hid logged in state`);
       }
 
-      // Start auto-retry mechanism when popup is open and API is offline
-      addVisibleDebug(`[UpdateStatus] Starting auto-retry mechanism`);
       this.startOfflineAutoRetry();
     } else {
-      // API is online or not checked yet - show normal content
-      addVisibleDebug(`[UpdateStatus] Showing online/normal state`);
-
       if (apiOfflineMessage) {
         apiOfflineMessage.classList.add("hidden");
-        addVisibleDebug(`[UpdateStatus] Hid offline message`);
       }
       if (loggedOutState && !this.isLoggedIn) {
         loggedOutState.classList.remove("hidden");
-        addVisibleDebug(`[UpdateStatus] Showed logged out state`);
       }
       if (loggedInState && this.isLoggedIn) {
         loggedInState.classList.remove("hidden");
-        addVisibleDebug(`[UpdateStatus] Showed logged in state`);
       }
 
-      // Stop auto-retry when API comes back online
       this.stopOfflineAutoRetry();
     }
 
-    // Update all status text elements
     statusTextElements.forEach((statusElement) => {
-      // Clear existing content and create elements
       statusElement.innerHTML = "";
 
-      // Add the status text
       const textSpan = document.createElement("span");
       textSpan.textContent = statusText;
       statusElement.appendChild(textSpan);
 
-      // Add refresh button for offline API status
       if (!this.isApiOnline) {
         const refreshButton = document.createElement("button");
         refreshButton.innerHTML = "🔄";
@@ -1022,7 +552,6 @@ class PopupManager {
           transition: background-color 0.2s;
         `;
 
-        // Add hover effect
         refreshButton.addEventListener("mouseenter", () => {
           refreshButton.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
         });
@@ -1030,32 +559,23 @@ class PopupManager {
           refreshButton.style.backgroundColor = "transparent";
         });
 
-        // Add click handler to retry API connection
         refreshButton.addEventListener("click", async (e) => {
           e.stopPropagation();
 
-          // Show loading state
           refreshButton.innerHTML = "⏳";
           refreshButton.disabled = true;
 
-          addVisibleDebug("[Manual Refresh] Retrying API connection...");
-
           try {
-            // Force immediate API status check with manual refresh flag
             await this.checkApiStatus(true);
 
             if (this.isApiOnline) {
-              addVisibleDebug("[Manual Refresh] API is now online!");
               this.showSuccess("API connection restored!");
             } else {
-              addVisibleDebug("[Manual Refresh] API still offline");
               this.showError("API still offline. Please try again later.");
             }
           } catch (error) {
-            addVisibleDebug("[Manual Refresh] Retry failed:", error.message);
             this.showError("Failed to check API status");
           } finally {
-            // Reset button after a short delay
             setTimeout(() => {
               refreshButton.innerHTML = "🔄";
               refreshButton.disabled = false;
@@ -1067,98 +587,58 @@ class PopupManager {
       }
     });
 
-    // Show/hide status containers based on API status
     statusContainers.forEach((container) => {
-      if (!this.isApiOnline) {
-        // Hide status containers when API is offline - we show the offline message instead
-        container.style.display = "none";
-      } else {
-        container.style.display = "none"; // Always hidden when API is online (no need for status indicator)
-      }
+      container.style.display = "none";
     });
 
-    // Apply styling based on active state
-    if (isActive) {
-      statusContainers.forEach((container) => {
-        container.classList.remove("logged-out");
-        container.classList.add("logged-in");
+    const elements = [statusContainers, statusTextElements, statusIndicators];
+    const className = isActive ? "logged-in" : "logged-out";
+    const removeClass = isActive ? "logged-out" : "logged-in";
+
+    elements.forEach((elementList) => {
+      elementList.forEach((element) => {
+        element.classList.remove(removeClass);
+        element.classList.add(className);
       });
-      statusTextElements.forEach((element) => {
-        element.classList.remove("logged-out");
-        element.classList.add("logged-in");
-      });
-      statusIndicators.forEach((indicator) => {
-        indicator.classList.remove("logged-out");
-        indicator.classList.add("logged-in");
-      });
-    } else {
-      statusContainers.forEach((container) => {
-        container.classList.remove("logged-in");
-        container.classList.add("logged-out");
-      });
-      statusTextElements.forEach((element) => {
-        element.classList.remove("logged-in");
-        element.classList.add("logged-out");
-      });
-      statusIndicators.forEach((indicator) => {
-        indicator.classList.remove("logged-in");
-        indicator.classList.add("logged-out");
-      });
-    }
+    });
   }
 
   saveToneSetting(tone) {
     this.currentTone = tone;
     chrome.storage.sync.set({ defaultTone: tone });
-    console.log("Tone setting saved:", tone);
   }
 
   startOfflineAutoRetry() {
-    // Only start if not already running
     if (this.offlineRetryInterval) {
       return;
     }
-
-    addVisibleDebug(
-      "[Auto-Retry] Starting automatic API reconnection attempts every 5 seconds"
-    );
 
     let retryCount = 0;
 
     this.offlineRetryInterval = setInterval(async () => {
       if (!this.isApiOnline) {
         retryCount++;
-        addVisibleDebug(
-          `[Auto-Retry] Attempt #${retryCount} - Attempting to reconnect to API...`
-        );
 
-        // Show visual feedback during retry
         this.updateRetryStatus(
-          `🔄 Checking connection... (attempt #${retryCount})`
+          `Checking connection... (attempt #${retryCount})`
         );
 
-        await this.checkApiStatus(false); // false = not manual refresh
+        await this.checkApiStatus(false);
 
         if (this.isApiOnline) {
-          addVisibleDebug("[Auto-Retry] API reconnected successfully!");
           this.showSuccess("Connection restored!");
           this.stopOfflineAutoRetry();
         } else {
-          // Reset to default retry message
-          this.updateRetryStatus(
-            "🔄 Automatically retrying every 5 seconds..."
-          );
+          this.updateRetryStatus("Automatically retrying every 10 seconds...");
         }
       } else {
-        // If somehow API is online, stop the retry
         this.stopOfflineAutoRetry();
       }
-    }, 5000); // Check every 5 seconds
+    }, 10000);
   }
 
   stopOfflineAutoRetry() {
     if (this.offlineRetryInterval) {
-      addVisibleDebug("[Auto-Retry] Stopping automatic reconnection attempts");
       clearInterval(this.offlineRetryInterval);
       this.offlineRetryInterval = null;
     }
@@ -1172,83 +652,39 @@ class PopupManager {
   }
 
   async loadTones() {
-    addVisibleDebug("[Popup] loadTones() starting...");
-
-    // First check if DOM elements exist
     const toneSelectLoggedOut = document.getElementById(
       "replyToneSelectLoggedOut"
     );
     const toneSelectLoggedIn = document.getElementById("replyToneSelect");
 
-    const domCheck = {
-      loggedOut: !!toneSelectLoggedOut,
-      loggedIn: !!toneSelectLoggedIn,
-      loggedOutValue: toneSelectLoggedOut ? toneSelectLoggedOut.value : "N/A",
-      loggedInValue: toneSelectLoggedIn ? toneSelectLoggedIn.value : "N/A",
-    };
-
-    addVisibleDebug("DOM check: " + JSON.stringify(domCheck));
-
     if (!toneSelectLoggedOut && !toneSelectLoggedIn) {
-      addVisibleDebug("ERROR: No tone select elements found!");
       return;
     }
 
     try {
       let tones;
 
-      // Check if we already have tones from preload or cache
       if (this.allTones && this.allTones.length > 0) {
-        addVisibleDebug("[Popup] Using existing tones:", this.allTones.length);
         tones = this.allTones;
       } else {
-        // Check cache first
         const cachedTones = await this.getCachedTones();
         if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
-          addVisibleDebug(
-            "[Popup] Using cached tones:",
-            cachedTones.tones.length
-          );
           tones = cachedTones.tones;
           this.allTones = tones;
         } else {
-          addVisibleDebug("[Popup] Fetching fresh tones from API...");
           tones = await this.api.getTones();
           this.allTones = tones;
-          // Cache the fresh tones
           await this.cacheTones(tones);
         }
       }
 
-      addVisibleDebug(
-        "Got " + tones.length + " tones: " + JSON.stringify(tones)
-      );
-
-      // Re-get elements in case they changed
-      const toneSelectLoggedOut = document.getElementById(
-        "replyToneSelectLoggedOut"
-      );
-      const toneSelectLoggedIn = document.getElementById("replyToneSelect");
-
-      addVisibleDebug("[Popup] Found tone selects after getting tones:", {
-        loggedOut: !!toneSelectLoggedOut,
-        loggedIn: !!toneSelectLoggedIn,
-      });
-
       [toneSelectLoggedOut, toneSelectLoggedIn].forEach((toneSelect) => {
         if (toneSelect) {
-          addVisibleDebug(`[Popup] Processing tone select: ${toneSelect.id}`);
-          // Always start with "Always ask me" as the first option
           toneSelect.innerHTML = '<option value="ask">Always ask me</option>';
 
-          // Add all tones from API (API already excludes "ask")
-          const filteredTones = tones;
-
-          // Filter preset and custom tones from the filtered list
-          const presetTones = filteredTones.filter(
+          const presetTones = tones.filter(
             (tone) =>
               tone.is_preset === true ||
-              // If is_preset is undefined/null, treat known preset tone names as presets
               (tone.is_preset === undefined &&
                 [
                   "neutral",
@@ -1259,10 +695,9 @@ class PopupManager {
                   "confident",
                 ].includes(tone.name))
           );
-          const customTones = filteredTones.filter(
+          const customTones = tones.filter(
             (tone) =>
               tone.is_preset === false ||
-              // If is_preset is undefined/null and it's not a known preset, treat as custom
               (tone.is_preset === undefined &&
                 ![
                   "neutral",
@@ -1274,16 +709,7 @@ class PopupManager {
                 ].includes(tone.name))
           );
 
-          addVisibleDebug(
-            `LoadTones: Preset tones for ${toneSelect.id}: ${presetTones.length} found`
-          );
-          addVisibleDebug(
-            `LoadTones: Custom tones for ${toneSelect.id}: ${customTones.length} found`
-          );
-
-          // For logged-in users (replyToneSelect), show custom tones first, then presets
           if (this.isLoggedIn && toneSelect.id === "replyToneSelect") {
-            // Add custom tones section first
             if (customTones.length > 0) {
               const customSeparator = document.createElement("option");
               customSeparator.disabled = true;
@@ -1298,7 +724,20 @@ class PopupManager {
               });
             }
 
-            // Add preset tones section after custom tones
+            if (presetTones.length > 0) {
+              const presetSeparator = document.createElement("option");
+              presetSeparator.disabled = true;
+              presetSeparator.textContent = "── Preset Tones ──";
+              toneSelect.appendChild(presetSeparator);
+
+              presetTones.forEach((tone) => {
+                const option = document.createElement("option");
+                option.value = tone.name;
+                option.textContent = tone.display_name;
+                toneSelect.appendChild(option);
+              });
+            }
+          } else if (toneSelect.id === "replyToneSelectLoggedOut") {
             if (presetTones.length > 0) {
               const presetSeparator = document.createElement("option");
               presetSeparator.disabled = true;
@@ -1313,36 +752,10 @@ class PopupManager {
               });
             }
           }
-          // For logged-out users (replyToneSelectLoggedOut), show only preset tones
-          else if (toneSelect.id === "replyToneSelectLoggedOut") {
-            if (presetTones.length > 0) {
-              const presetSeparator = document.createElement("option");
-              presetSeparator.disabled = true;
-              presetSeparator.textContent = "── Preset Tones ──";
-              toneSelect.appendChild(presetSeparator);
-
-              presetTones.forEach((tone) => {
-                const option = document.createElement("option");
-                option.value = tone.name;
-                option.textContent = tone.display_name;
-                toneSelect.appendChild(option);
-              });
-            }
-          }
-
-          addVisibleDebug(
-            `[Popup] Finished populating ${toneSelect.id}, options count: ${toneSelect.options.length}`
-          );
-        } else {
-          addVisibleDebug(`[Popup] Tone select element not found in DOM`);
         }
       });
-
-      addVisibleDebug("[Popup] loadTones() completed successfully");
     } catch (error) {
-      addVisibleDebug("Failed to load tones:", error);
-      addVisibleDebug("Error stack:", error.stack);
-      // Keep the existing "Always ask me" option as fallback
+      console.error("Failed to load tones:", error);
     }
   }
 
@@ -1352,7 +765,6 @@ class PopupManager {
     const customTonesList = document.getElementById("customTonesList");
     if (!customTonesList) return;
 
-    // Filter custom tones (non-preset tones)
     const customTones = this.allTones.filter((tone) => !tone.is_preset);
 
     if (customTones.length === 0) {
@@ -1412,7 +824,6 @@ class PopupManager {
       this.showSuccess(isEdit ? "Tone updated!" : "Tone created!");
       this.cancelToneForm();
 
-      // Reload tones and update UI
       await this.loadTones();
       this.loadCustomTones();
     } catch (error) {
@@ -1478,7 +889,6 @@ class PopupManager {
       await this.api.deleteCustomTone(toneId);
       this.showSuccess("Tone deleted!");
 
-      // Reload tones and update UI
       await this.loadTones();
       this.loadCustomTones();
     } catch (error) {
@@ -1509,6 +919,11 @@ class PopupManager {
           this.enableEverywhere = result.enableEverywhere;
         }
 
+        // Capture the initial value (only first time)
+        if (typeof this.enableEverywhereInitial === "undefined") {
+          this.enableEverywhereInitial = this.enableEverywhere;
+        }
+
         const loggedOutSelect = document.getElementById(
           "replyToneSelectLoggedOut"
         );
@@ -1516,7 +931,6 @@ class PopupManager {
         if (loggedOutSelect) loggedOutSelect.value = this.currentTone;
         if (loggedInSelect) loggedInSelect.value = this.currentTone;
 
-        // Update all integration toggles
         document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
           el.checked = this.useIntegrations;
         });
@@ -1524,7 +938,6 @@ class PopupManager {
           el.textContent = this.useIntegrations ? "On" : "Off";
         });
 
-        // Update all select reply toggles
         document
           .querySelectorAll(".enable-select-reply-toggle")
           .forEach((el) => {
@@ -1536,13 +949,15 @@ class PopupManager {
             el.textContent = this.enableSelectReply ? "On" : "Off";
           });
 
-        // Update all enable everywhere toggles
         document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
           el.checked = this.enableEverywhere;
         });
         document.querySelectorAll(".enable-everywhere-status").forEach((el) => {
           el.textContent = this.enableEverywhere ? "On" : "Off";
         });
+
+        // Ensure labels reflect correct suffix state on load
+        this.updateEnableEverywhereReloadNeeded(this.enableEverywhere);
       }
     );
   }
@@ -1578,32 +993,25 @@ class PopupManager {
     document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
       if (el.checked !== enabled) el.checked = enabled;
     });
+    this.updateEnableEverywhereReloadNeeded(enabled);
   }
 
   setupEventListeners() {
-    // Login button
     const loginButton = document.getElementById("loginButton");
     if (loginButton) {
       loginButton.addEventListener("click", () => this.handleLogin());
-      appendDebug("Primary listener bound: loginButton");
     }
 
-    // Signup button
     const signupButton = document.getElementById("signupButton");
     if (signupButton) {
       signupButton.addEventListener("click", () => this.handleSignup());
     }
 
-    // Listen for storage changes to detect authentication updates
     chrome.storage.onChanged.addListener((changes, namespace) => {
-      addVisibleDebug("Storage changed:", changes, namespace); // Debug logging
       if (
         namespace === "sync" &&
         (changes.userToken || changes.userProfile || changes.isAuthenticated)
       ) {
-        addVisibleDebug(
-          "Auth-related storage change detected (delegating to AuthManager)"
-        );
         this.authManager.checkAuthStatus().then(() => {
           const authState = this.authManager.getAuthState();
           this.isLoggedIn = authState.isLoggedIn;
@@ -1616,26 +1024,21 @@ class PopupManager {
       }
     });
 
-    // Periodic background auth cache check (diagnostic)
     this._bgDiagInterval = setInterval(() => {
       try {
         chrome.runtime.sendMessage({ action: "getAuthState" }, (resp) => {
           if (resp && resp.auth) {
             const bgTokenPresent = !!resp.auth.userToken;
             if (bgTokenPresent && !this.isLoggedIn) {
-              addVisibleDebug(
-                "[Popup] Background has token but popup state logged out. Forcing re-check."
-              );
               this.checkAuthStatus();
             }
           }
         });
       } catch (e) {
-        /* ignore */
+        // Ignore errors
       }
     }, 5000);
 
-    // Tone selectors
     const toneSelectLoggedOut = document.getElementById(
       "replyToneSelectLoggedOut"
     );
@@ -1652,43 +1055,14 @@ class PopupManager {
       );
     }
 
-    // Debug refresh button
-    const debugRefreshButton = document.getElementById("debugRefreshButton");
-    if (debugRefreshButton) {
-      debugRefreshButton.addEventListener("click", () =>
-        this.refreshAuthState()
-      );
-      appendDebug("Primary listener bound: debugRefreshButton");
-    }
-
-    // Dashboard button
     const dashboardButton = document.getElementById("dashboardButton");
     if (dashboardButton) {
       dashboardButton.addEventListener("click", () => this.openDashboard());
-      appendDebug("Primary listener bound: dashboardButton");
     }
 
-    // Logout button
     const logoutButton = document.getElementById("logoutButton");
     if (logoutButton) {
       logoutButton.addEventListener("click", () => this.handleLogout());
-      appendDebug("Primary listener bound: logoutButton");
-    }
-
-    // Integrations toggle
-    const integrationsToggle = document.getElementById("useIntegrationsToggle");
-    if (integrationsToggle) {
-      integrationsToggle.addEventListener("change", (e) => {
-        this.saveIntegrationsSetting(e.target.checked);
-      });
-    }
-    const selectReplyToggle = document.getElementById(
-      "enableSelectReplyToggle"
-    );
-    if (selectReplyToggle) {
-      selectReplyToggle.addEventListener("change", (e) => {
-        this.saveSelectReplySetting(e.target.checked);
-      });
     }
 
     document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
@@ -1711,31 +1085,16 @@ class PopupManager {
 
   async handleLogin() {
     try {
-      addVisibleDebug("[Popup] handleLogin start");
       const loginBtn = document.getElementById("loginButton");
       if (loginBtn) {
         loginBtn.dataset.originalText = loginBtn.innerHTML;
         loginBtn.innerHTML = "🔄 Opening login...";
         loginBtn.disabled = true;
-      } else {
-        addVisibleDebug("[Popup] loginButton not found in DOM");
       }
 
-      // Use Supabase Auth popup (wrap to capture early failures)
-      let authResult;
-      try {
-        authResult = await this.supabase.authenticateWithPopup("signin");
-        addVisibleDebug("[Popup] authenticateWithPopup resolved");
-      } catch (innerErr) {
-        addVisibleDebug("[Popup] authenticateWithPopup error:", innerErr);
-        throw innerErr;
-      }
-
-      // Handle successful authentication
+      const authResult = await this.supabase.authenticateWithPopup("signin");
       await this.handleAuthResult(authResult, "Login successful!");
-      addVisibleDebug("[Popup] handleAuthResult completed");
     } catch (error) {
-      addVisibleDebug("Login failed:", error);
       if (error.message === "Authentication cancelled by user") {
         this.showError("Login cancelled");
       } else {
@@ -1748,13 +1107,11 @@ class PopupManager {
           loginBtn.dataset.originalText || "🚀 Login to HumanReplies";
         loginBtn.disabled = false;
       }
-      addVisibleDebug("[Popup] handleLogin end");
     }
   }
 
   async handleSignup() {
     try {
-      // Show loading state
       const signupBtn = document.querySelector(
         '.login-button[onclick="handleSignup()"]'
       );
@@ -1762,20 +1119,15 @@ class PopupManager {
       signupBtn.innerHTML = "🔄 Opening signup...";
       signupBtn.disabled = true;
 
-      // Use Supabase Auth popup for signup
       const authResult = await this.supabase.authenticateWithPopup("signup");
-
-      // Handle successful authentication (either immediate or after email confirmation)
       await this.handleAuthResult(authResult, "Account created successfully!");
     } catch (error) {
-      console.error("Signup failed:", error);
       if (error.message === "Authentication cancelled by user") {
         this.showError("Signup cancelled");
       } else {
         this.showError("Signup failed. Please try again.");
       }
     } finally {
-      // Reset button
       const signupBtn = document.querySelector(
         '.login-button[onclick="handleSignup()"]'
       );
@@ -1787,14 +1139,12 @@ class PopupManager {
 
   async handleLogout() {
     try {
-      // Get current token
       const result = await new Promise((resolve) => {
         chrome.storage.sync.get(["userToken"], resolve);
       });
 
       if (result.userToken) {
         try {
-          // Sign out from Supabase
           await this.supabase.signOut(result.userToken);
         } catch (error) {
           console.warn("Supabase logout failed:", error);
@@ -1811,13 +1161,8 @@ class PopupManager {
 
   async handleAuthResult(authResult, successMessage) {
     if (authResult && authResult.access_token) {
-      console.log("handleAuthResult called with:", authResult);
-
-      // Get user info from Supabase
       const userInfo = await this.supabase.getUserInfo(authResult.access_token);
-      console.log("User info retrieved:", userInfo);
 
-      // Prepare auth data with user profile
       const authDataWithProfile = {
         access_token: authResult.access_token,
         refresh_token: authResult.refresh_token,
@@ -1832,33 +1177,18 @@ class PopupManager {
         },
       };
 
-      console.log("Storing auth data using AuthManager:", authDataWithProfile);
-
-      // Use the robust auth manager to store data
       const stored = await this.authManager.storeAuthData(authDataWithProfile);
 
       if (stored) {
-        console.log("Auth data stored successfully via AuthManager");
-
-        // Update local state directly (don't wait for AuthManager sync)
         this.isLoggedIn = true;
         this.currentUser = authDataWithProfile.userProfile;
-
-        console.log(
-          "Updated local state - isLoggedIn:",
-          this.isLoggedIn,
-          "currentUser:",
-          this.currentUser
-        );
 
         this.updateUIState();
         this.showSuccess(successMessage);
 
-        // Reload tones to get user's custom tones
         await this.loadTones();
         this.loadCustomTones();
       } else {
-        console.error("Failed to store auth data");
         this.showError(
           "Login successful but failed to save session. Please try again."
         );
@@ -1867,12 +1197,8 @@ class PopupManager {
   }
 
   async clearAuthData() {
-    console.log("Clearing auth data using AuthManager");
-
-    // Use auth manager to clear data
     await this.authManager.clearAuthData();
 
-    // Update local state
     this.isLoggedIn = false;
     this.currentUser = null;
 
@@ -1880,60 +1206,27 @@ class PopupManager {
   }
 
   openDashboard() {
-    // Get dashboard URL from environment config
     const dashboardUrl = window.EnvironmentConfig
       ? window.EnvironmentConfig.getConfig().dashboardURL
-      : "https://humanreplies.com/dashboard"; // fallback
+      : "https://humanreplies.com/dashboard";
 
     chrome.tabs.create({ url: dashboardUrl });
-    console.log("[Popup] Opening dashboard:", dashboardUrl);
   }
 
   updateUIState() {
-    console.log(
-      "Updating UI state - isLoggedIn:",
-      this.isLoggedIn,
-      "currentUser:",
-      this.currentUser
-    ); // Debug logging
-
-    addVisibleDebug(`[UpdateUIState] ===== CALLED =====`);
-    addVisibleDebug(
-      `[UpdateUIState] API Status: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
-    );
-
     const loggedOutState = document.getElementById("loggedOutState");
     const loggedInState = document.getElementById("loggedInState");
     const apiOfflineMessage = document.getElementById("api-offline-message");
 
-    addVisibleDebug(
-      `[UpdateUIState] Elements: loggedOut=${!!loggedOutState}, loggedIn=${!!loggedInState}, offlineMsg=${!!apiOfflineMessage}`
-    );
-
-    // Don't update UI state if API is offline - let updateExtensionStatus handle it
     if (this.apiStatusChecked && !this.isApiOnline) {
-      addVisibleDebug(
-        "[UpdateUIState] *** API IS OFFLINE - SKIPPING UI STATE UPDATE ***"
-      );
-      if (apiOfflineMessage) {
-        addVisibleDebug(
-          `[UpdateUIState] Offline message current classes: "${apiOfflineMessage.className}"`
-        );
-      }
       return;
-    } else {
-      addVisibleDebug(
-        `[UpdateUIState] API is online or not checked, proceeding with normal UI update`
-      );
     }
 
     if (this.isLoggedIn && this.currentUser) {
-      // Show logged-in interface
       if (loggedOutState) loggedOutState.classList.add("hidden");
       if (loggedInState) {
         loggedInState.classList.remove("hidden");
 
-        // Update user info
         const userAvatar = document.getElementById("userAvatar");
         const userName = document.getElementById("userName");
         const userEmail = document.getElementById("userEmail");
@@ -1953,23 +1246,19 @@ class PopupManager {
           userEmail.textContent = this.currentUser.email;
         }
 
-        // Load custom tones
         this.loadCustomTones();
       }
     } else {
-      // Show logged-out interface
       if (loggedInState) loggedInState.classList.add("hidden");
       if (loggedOutState) {
         loggedOutState.classList.remove("hidden");
 
-        // Update login button text
         const loginButton = document.getElementById("loginButton");
         if (loginButton) {
           loginButton.textContent = "🚀 Login to HumanReplies";
           loginButton.style.background = "#2c3e50";
         }
 
-        // Show disabled overlay for advanced features
         const disabledOverlay = document.querySelector(".disabled-overlay");
         if (disabledOverlay) {
           disabledOverlay.classList.remove("hidden");
@@ -1989,7 +1278,6 @@ class PopupManager {
   }
 
   showNotification(message, type) {
-    // Create notification element
     const notification = document.createElement("div");
     notification.style.cssText = `
       position: fixed;
@@ -2020,8 +1308,19 @@ class PopupManager {
     const supportedSiteView = document.getElementById("supported-site-view");
     if (supportedSiteView) {
       supportedSiteView.style.display = "block";
-      addVisibleDebug("[Popup] Content now visible after login check");
     }
+  }
+
+  updateEnableEverywhereReloadNeeded(currentValue) {
+    const changed = currentValue !== this.enableEverywhereInitial;
+    document.querySelectorAll(".enable-everywhere-toggle").forEach((toggle) => {
+      const setting = toggle.closest(".setting");
+      if (!setting) return;
+      const labelEl = setting.querySelector(".setting-label");
+      if (!labelEl) return;
+      labelEl.textContent =
+        "Enable everywhere" + (changed ? " (Reload needed)" : "");
+    });
   }
 }
 
@@ -2080,181 +1379,18 @@ function deleteCustomTone(toneId) {
   }
 }
 
-// Global debug functions
-window.debugAuth = async function () {
-  const result = await new Promise((resolve) => {
-    chrome.storage.sync.get(
-      ["userToken", "userProfile", "refreshToken", "tokenExpiry"],
-      resolve
-    );
-  });
-  console.log("Current auth storage:", result);
-  return result;
-};
-
-window.testApiDirect = async function () {
-  addVisibleDebug("[DirectTest] Starting direct API test...");
-
-  try {
-    // Test 1: Direct fetch to the API
-    addVisibleDebug("[DirectTest] Testing direct fetch...");
-    const response = await fetch("http://localhost:8000/api/v1/tones/", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    });
-
-    addVisibleDebug("[DirectTest] Response status:", response.status);
-
-    if (response.ok) {
-      const data = await response.json();
-      addVisibleDebug("[DirectTest] Response data:", {
-        hasTones: !!data.tones,
-        tonesCount: data.tones ? data.tones.length : 0,
-      });
-    } else {
-      addVisibleDebug("[DirectTest] Response not OK:", response.statusText);
-    }
-  } catch (error) {
-    addVisibleDebug("[DirectTest] Direct fetch error:", error.message);
-  }
-
-  // Test 2: Using the API service
-  if (window.popupManager && window.popupManager.api) {
-    addVisibleDebug("[DirectTest] Testing via API service...");
-    try {
-      const tones = await window.popupManager.api.getTones({
-        timeoutMs: 10000,
-        reason: "direct-test",
-      });
-      addVisibleDebug("[DirectTest] API service result:", {
-        tonesCount: tones ? tones.length : 0,
-        firstTone: tones && tones[0] ? tones[0].name : "none",
-      });
-    } catch (error) {
-      addVisibleDebug("[DirectTest] API service error:", error.message);
-    }
-  } else {
-    addVisibleDebug("[DirectTest] No API service available");
-  }
-};
-
-window.forceRefresh = function () {
-  if (window.popupManager) {
-    window.popupManager.refreshAuthState();
-  }
-};
-
-window.checkStorageNow = async function () {
-  console.log("=== STORAGE DEBUG CHECK ===");
-
-  // Check both sync and local storage
-  const syncResult = await new Promise((resolve) => {
-    chrome.storage.sync.get(
-      [
-        "userToken",
-        "userProfile",
-        "refreshToken",
-        "tokenExpiry",
-        "isAuthenticated",
-      ],
-      resolve
-    );
-  });
-
-  const localResult = await new Promise((resolve) => {
-    chrome.storage.local.get(
-      [
-        "userToken",
-        "userProfile",
-        "refreshToken",
-        "tokenExpiry",
-        "isAuthenticated",
-      ],
-      resolve
-    );
-  });
-
-  console.log("Sync storage:", syncResult);
-  console.log("Local storage:", localResult);
-
-  if (window.popupManager) {
-    console.log(
-      "PopupManager state - isLoggedIn:",
-      window.popupManager.isLoggedIn
-    );
-    console.log(
-      "PopupManager state - currentUser:",
-      window.popupManager.currentUser
-    );
-
-    if (window.popupManager.authManager) {
-      const authState = window.popupManager.authManager.getAuthState();
-      console.log("AuthManager state:", authState);
-    }
-  }
-
-  return { sync: syncResult, local: localResult };
-};
-
 // Initialize when DOM is ready
 document.addEventListener("DOMContentLoaded", function () {
-  addVisibleDebug("DOMContentLoaded fired");
-  console.log("[Popup] DOMContentLoaded fired");
-  console.log("[Popup] DOM is ready, initializing...");
-
-  // Check if required dependencies are loaded
-  const deps = {
-    HumanRepliesAPI: typeof HumanRepliesAPI,
-    SupabaseClient: typeof SupabaseClient,
-    AuthManager: typeof AuthManager,
-    EnvironmentConfig: typeof window.EnvironmentConfig,
-  };
-
-  addVisibleDebug("Dependencies: " + JSON.stringify(deps));
-  console.log("[Popup] Checking dependencies:", deps);
-
-  appendDebug("DOMContentLoaded");
   try {
-    addVisibleDebug("Creating PopupManager...");
-    console.log("[Popup] Creating PopupManager...");
     window.popupManager = new PopupManager();
-
-    addVisibleDebug("PopupManager created successfully");
-    console.log("[Popup] PopupManager created successfully");
-    appendDebug("PopupManager constructed");
   } catch (e) {
-    addVisibleDebug("PopupManager error: " + e.message);
-    console.error("[Popup] Failed constructing PopupManager", e);
-    console.error("[Popup] Error stack:", e.stack);
-    appendDebug("PopupManager construction failed: " + (e && e.message));
+    console.error("Failed to create PopupManager:", e);
   }
-
-  // Basic DOM test
-  const loggedOutSelect = document.getElementById("replyToneSelectLoggedOut");
-  const loggedInSelect = document.getElementById("replyToneSelect");
-  console.log("[Popup] DOM elements found:", {
-    loggedOut: !!loggedOutSelect,
-    loggedIn: !!loggedInSelect,
-  });
 });
 
 // Cleanup when popup is closed
 window.addEventListener("beforeunload", function () {
   if (window.popupManager) {
-    addVisibleDebug("[Cleanup] Popup closing, stopping auto-retry");
     window.popupManager.stopOfflineAutoRetry();
   }
-});
-
-// Also log when the script is fully parsed
-console.log("[Popup] Script parsing completed");
-
-// Test if chrome APIs are available
-console.log("[Popup] Chrome APIs available:", {
-  chrome: typeof chrome,
-  storage: typeof chrome?.storage,
-  runtime: typeof chrome?.runtime,
 });
