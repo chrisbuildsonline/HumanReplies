@@ -2,6 +2,8 @@
 
 AI-powered reply generation for social media. Built for quick, contextual, and customizable responses — with a Chrome extension, FastAPI backend, and analytics dashboard (Next.js).
 
+Made for everyone, no paywall.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -54,6 +56,36 @@ npm run dev   # http://localhost:3000
 
 ---
 
+## Backend
+
+- Purpose: FastAPI service with Supabase Auth and PostgreSQL (async SQLAlchemy).
+- Highlights: Privacy-first analytics (no post content stored), tone presets + user tones, cached external service URLs.
+- Auth: Validates Supabase JWTs; Redis caching is optional and auto-disables if unavailable.
+- Run: `cd backend && ./setup.sh` then `python run.py` (docs at `/docs`).
+- Env: `.env` with `SUPABASE_*` and DB URL, e.g. `database_url=postgresql+asyncpg://postgres:password@localhost:5432/humanreplies`.
+- Key endpoints: `/api/v1/services/generate-reply`, `/api/v1/tones`, `/api/v1/replies`, `/api/v1/user-settings`.
+
+## Browser Extension (Chrome MV3)
+
+- Purpose: One‑click, context‑aware replies on X, LinkedIn, Facebook (or anywhere you enable it).
+- Highlights: Preset + custom tones, offline‑aware UI with auto‑retry, selection‑based floating action.
+- Backend: Uses `browser-extension/config/environment.js` (dev points to `http://localhost:8000/api/v1`).
+- Load: Chrome → `chrome://extensions` → Developer Mode → Load unpacked → `browser-extension/`.
+- Flow: Select text → click “Generate Reply” → pick tone → copy one of 3 variations.
+- Auth: Supabase login in popup; token used transparently for tone and analytics APIs.
+
+## Dashboard
+
+- Purpose: Next.js 14 app for usage stats, recent activity, tones and settings.
+- Highlights: Supabase SSR, charts, and simple RLS‑friendly calls to the backend.
+- Env: Create `.env.local` with:
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `NEXT_PUBLIC_API_HOST=http://localhost:8000`
+- Run: `cd dashboard && npm i && npm run dev` → `http://localhost:3000`.
+- Shows: Totals, daily chart, top services, recent replies (timestamps + platform only).
+
+---
+
 ## ✨ Key Features
 
 ### Extension
@@ -74,9 +106,9 @@ npm run dev   # http://localhost:3000
 ### Dashboard
 
 - 📈 Usage stats (daily/weekly/monthly)
-- 📊 Service breakdown (X, LinkedIn, Facebook)
 - ⚙️ Settings & tone management
-- 🌓 Dark/light mode
+- 🔍 Reddit integration
+- 🎤 Custom voice
 
 ---
 

@@ -363,12 +363,22 @@ def build_prompt(context: str, options: Dict[str, Any]) -> str:
         "Before returning, scan the text and replace any em/en dash with a comma or period."
     )
     
+    # Request 3 variations in JSON format
+    variation_instruction = (
+        "Generate exactly 3 different variations of the reply. "
+        "Return them as a JSON object with this exact format: "
+        "{\"variations\": [\"variation1\", \"variation2\", \"variation3\"]}. "
+        "Each variation should be unique and follow all the rules above. "
+        "Do not include any other text outside the JSON response."
+    )
+    
     prompt_parts = [
         f"{tone_instruction} to this {('X (Twitter)' if is_twitter else p)} post: \"{context}\".",
         f"{platform_instructions} Keep it conversational and human-like.",
         "Be respectful. No emojis unless present in the original.",
         no_dash_rule,
-        ". If you cant generate a valid reply, just reply with the text: error"
+        variation_instruction,
+        "If you can't generate valid replies, return: {\"variations\": [\"error\", \"error\", \"error\"]}"
     ]
     
     return "\n".join(filter(None, prompt_parts)).strip()

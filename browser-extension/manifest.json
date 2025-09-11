@@ -27,6 +27,8 @@
         "<all_urls>"
       ],
       "js": [
+        "config/environment.js",
+        "core/api-service.js",
         "content-scripts/context.js"
       ],
       "css": [

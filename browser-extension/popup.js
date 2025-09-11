@@ -35,6 +35,7 @@ class PopupManager {
     this.useIntegrations = true; // default ON
     this.enableSelectReply = true; // default ON
     this.enableEverywhere = false; // default OFF (social media only)
+    this.offlineRetryInterval = null; // Track auto-retry interval when offline
 
     // Initialize async
     this.loadApiStatus(); // Load saved status first
@@ -121,35 +122,83 @@ class PopupManager {
     addVisibleDebug(`[${refreshType}] Environment:`, this.api.environment);
 
     try {
-      // Quick ping to check if API is responding
-      const tones = await this.api.getTones({
-        timeoutMs: isManualRefresh ? 5000 : 3000, // Longer timeout for manual refresh
-        reason: isManualRefresh ? "manual-refresh" : "status-check",
-      });
+      // Use instance checkConnectivity method if available, otherwise fall back to getTones
+      if (typeof this.api.checkConnectivity === "function") {
+        addVisibleDebug(`[${refreshType}] Using instance checkConnectivity method`);
+        const result = await this.api.checkConnectivity();
+        this.isApiOnline = result.isOnline;
+        
+        if (result.error) {
+          addVisibleDebug(`[${refreshType}] Connectivity check error:`, result.error);
+        }
+        
+        // If API is online, also load tones to refresh data
+        if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
+          addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
+          const tones = await this.api.getTones({
+            timeoutMs: isManualRefresh ? 5000 : 3000,
+            reason: isManualRefresh ? "manual-refresh" : "status-check",
+          });
+          this.allTones = tones;
+          await this.loadTones();
+          if (this.isLoggedIn) {
+            this.loadCustomTones();
+          }
+        }
+      } else if (typeof window.checkConnectivity === "function") {
+        addVisibleDebug(`[${refreshType}] Using global checkConnectivity function`);
+        const result = await window.checkConnectivity();
+        this.isApiOnline = result.isOnline;
+        
+        if (result.error) {
+          addVisibleDebug(`[${refreshType}] Connectivity check error:`, result.error);
+        }
+        
+        // If API is online, also load tones to refresh data
+        if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
+          addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
+          const tones = await this.api.getTones({
+            timeoutMs: isManualRefresh ? 5000 : 3000,
+            reason: isManualRefresh ? "manual-refresh" : "status-check",
+          });
+          this.allTones = tones;
+          await this.loadTones();
+          if (this.isLoggedIn) {
+            this.loadCustomTones();
+          }
+        }
+      } else {
+        // Fallback to original getTones method
+        addVisibleDebug(`[${refreshType}] Using getTones for connectivity check`);
+        const tones = await this.api.getTones({
+          timeoutMs: isManualRefresh ? 5000 : 3000,
+          reason: isManualRefresh ? "manual-refresh" : "status-check",
+        });
 
-      addVisibleDebug(`[${refreshType}] API response:`, {
-        tonesReceived: tones ? tones.length : 0,
-        isArray: Array.isArray(tones),
-        firstTone: tones && tones[0] ? tones[0].name : "none",
-      });
+        addVisibleDebug(`[${refreshType}] API response:`, {
+          tonesReceived: tones ? tones.length : 0,
+          isArray: Array.isArray(tones),
+          firstTone: tones && tones[0] ? tones[0].name : "none",
+        });
 
-      this.isApiOnline = tones && tones.length > 0;
+        this.isApiOnline = tones && tones.length > 0;
+
+        // If API came back online, reload tones
+        if (!wasOnline && this.isApiOnline) {
+          addVisibleDebug("[StatusCheck] API restored, reloading tones...");
+          this.allTones = tones;
+          await this.loadTones();
+          if (this.isLoggedIn) {
+            this.loadCustomTones();
+          }
+        }
+      }
 
       addVisibleDebug(
         `[${refreshType}] API is`,
-        this.isApiOnline ? "online" : "offline",
-        `(${tones ? tones.length : 0} tones)`
+        this.isApiOnline ? "online" : "offline"
       );
 
-      // If API came back online, reload tones
-      if (!wasOnline && this.isApiOnline) {
-        addVisibleDebug("[StatusCheck] API restored, reloading tones...");
-        this.allTones = tones; // Update tones from the successful call
-        await this.loadTones(); // Refresh the UI
-        if (this.isLoggedIn) {
-          this.loadCustomTones(); // Reload custom tones if logged in
-        }
-      }
     } catch (err) {
       this.isApiOnline = false;
       addVisibleDebug(`[${refreshType}] API error:`, {
@@ -174,6 +223,9 @@ class PopupManager {
             lastChecked: Date.now(),
           },
         })
+        .then(() => {
+          addVisibleDebug("[StatusSave] API status saved:", this.isApiOnline ? "online" : "offline");
+        })
         .catch((err) => {
           addVisibleDebug("[StatusSave] Error saving API status:", err.message);
         });
@@ -181,31 +233,51 @@ class PopupManager {
   }
 
   async loadApiStatus() {
-    // Load saved API status from Chrome storage
-    if (typeof chrome !== "undefined" && chrome.storage) {
-      try {
-        const result = await new Promise((resolve) => {
-          chrome.storage.local.get(["humanreplies_api_status"], resolve);
-        });
-
-        if (result.humanreplies_api_status) {
-          const status = result.humanreplies_api_status;
-          const isRecent = Date.now() - status.lastChecked < 60000; // 1 minute
-
-          if (isRecent) {
-            this.isApiOnline = status.isOnline;
-            this.apiStatusChecked = true;
-            addVisibleDebug(
-              "[StatusLoad] Loaded API status:",
-              this.isApiOnline ? "online" : "offline"
-            );
-            this.updateExtensionStatus();
-          }
+    // First try to load cached status, only do live check if cache is stale
+    addVisibleDebug("[StatusLoad] Loading API status from storage...");
+    
+    try {
+      const result = await new Promise((resolve, reject) => {
+        if (typeof chrome !== "undefined" && chrome.storage) {
+          chrome.storage.local.get(["humanreplies_api_status"], (result) => {
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            } else {
+              resolve(result);
+            }
+          });
+        } else {
+          resolve({});
         }
-      } catch (err) {
-        addVisibleDebug("[StatusLoad] Error loading API status:", err.message);
+      });
+
+      if (result.humanreplies_api_status) {
+        const status = result.humanreplies_api_status;
+        const age = Date.now() - status.lastChecked;
+        const isRecent = age < 30000; // 30 seconds
+
+        if (isRecent) {
+          // Use cached status if it's recent
+          this.isApiOnline = status.isOnline;
+          this.apiStatusChecked = true;
+          addVisibleDebug(`[StatusLoad] Using cached status (${age}ms old):`, status.isOnline ? "online" : "offline");
+          this.updateExtensionStatus();
+          return;
+        } else {
+          addVisibleDebug(`[StatusLoad] Cached status is stale (${age}ms old), performing live check`);
+        }
+      } else {
+        addVisibleDebug("[StatusLoad] No cached status found, performing live check");
       }
+    } catch (err) {
+      addVisibleDebug("[StatusLoad] Error loading cached status:", err.message);
     }
+
+    // Fall back to live check if no recent cached status
+    this.isApiOnline = false;
+    this.apiStatusChecked = false;
+    this.updateExtensionStatus();
+    await this.checkApiStatus(false);
   }
 
   async preloadTones() {
@@ -224,7 +296,10 @@ class PopupManager {
       // Check if we have cached tones first
       const cachedTones = await this.getCachedTones();
       if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
-        addVisibleDebug("[EarlyTones] Using cached tones:", cachedTones.tones.length);
+        addVisibleDebug(
+          "[EarlyTones] Using cached tones:",
+          cachedTones.tones.length
+        );
         this.allTones = cachedTones.tones;
         this.isApiOnline = true;
         this.apiStatusChecked = true;
@@ -239,24 +314,24 @@ class PopupManager {
       });
       addVisibleDebug("[EarlyTones] Received tones count:", tones.length);
       this.allTones = tones;
-      
+
       // Cache the tones
       await this.cacheTones(tones);
-      
+
       this.isApiOnline = true;
       this.apiStatusChecked = true;
       this.saveApiStatus();
       this.updateExtensionStatus(); // Update UI with online status
     } catch (err) {
       addVisibleDebug("[EarlyTones] Error fetching tones:", err.message);
-      
+
       // Try to use cached tones as fallback
       const cachedTones = await this.getCachedTones();
       if (cachedTones) {
         addVisibleDebug("[EarlyTones] Using cached tones as fallback");
         this.allTones = cachedTones.tones;
       }
-      
+
       this.isApiOnline = false;
       this.apiStatusChecked = true;
       this.saveApiStatus();
@@ -267,7 +342,7 @@ class PopupManager {
   async getCachedTones() {
     try {
       const result = await new Promise((resolve) => {
-        chrome.storage.local.get(['humanreplies_tones_cache'], resolve);
+        chrome.storage.local.get(["humanreplies_tones_cache"], resolve);
       });
       return result.humanreplies_tones_cache || null;
     } catch (err) {
@@ -281,19 +356,22 @@ class PopupManager {
       const cacheData = {
         tones: tones,
         cachedAt: Date.now(),
-        isLoggedIn: this.isLoggedIn
+        isLoggedIn: this.isLoggedIn,
       };
-      
+
       await new Promise((resolve, reject) => {
-        chrome.storage.local.set({ humanreplies_tones_cache: cacheData }, () => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-          } else {
-            resolve();
+        chrome.storage.local.set(
+          { humanreplies_tones_cache: cacheData },
+          () => {
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            } else {
+              resolve();
+            }
           }
-        });
+        );
       });
-      
+
       addVisibleDebug("[Cache] Tones cached successfully");
     } catch (err) {
       addVisibleDebug("[Cache] Error caching tones:", err.message);
@@ -302,30 +380,34 @@ class PopupManager {
 
   shouldRefreshTones(cachedData) {
     if (!cachedData) return true;
-    
+
     const now = Date.now();
     const cacheAge = now - cachedData.cachedAt;
     const twentyFourHours = 24 * 60 * 60 * 1000;
-    
+
     // If user is logged in, always refresh (they might have new custom tones)
     if (this.isLoggedIn) {
       addVisibleDebug("[Cache] Logged in user - forcing refresh");
       return true;
     }
-    
+
     // If cache is older than 24 hours, refresh
     if (cacheAge > twentyFourHours) {
       addVisibleDebug("[Cache] Cache expired (24h+) - refreshing");
       return true;
     }
-    
-    // If login state changed since cache, refresh  
+
+    // If login state changed since cache, refresh
     if (cachedData.isLoggedIn !== this.isLoggedIn) {
       addVisibleDebug("[Cache] Login state changed - refreshing");
       return true;
     }
-    
-    addVisibleDebug("[Cache] Using cached tones (age: " + Math.round(cacheAge / 1000 / 60) + " minutes)");
+
+    addVisibleDebug(
+      "[Cache] Using cached tones (age: " +
+        Math.round(cacheAge / 1000 / 60) +
+        " minutes)"
+    );
     return false;
   }
 
@@ -387,6 +469,9 @@ class PopupManager {
     this.updateUIState();
     this.loadToneSetting();
     this.setupEventListeners();
+    
+    // Show the popup content after login check is complete
+    this.showPopupContent();
 
     // Set up periodic auth check using the auth manager
     this.authManager.startPeriodicCheck((isLoggedIn, currentUser) => {
@@ -589,6 +674,11 @@ class PopupManager {
     const statusIndicators = document.querySelectorAll(".status-indicator");
     const statusContainers = document.querySelectorAll(".extensionStatus");
 
+    // Get elements to show/hide based on API status
+    const apiOfflineMessage = document.getElementById("api-offline-message");
+    const loggedOutState = document.getElementById("loggedOutState");
+    const loggedInState = document.getElementById("loggedInState");
+
     if (
       !statusTextElements.length ||
       !statusIndicators.length ||
@@ -604,6 +694,34 @@ class PopupManager {
     if (this.apiStatusChecked && !this.isApiOnline) {
       statusText = "HumanReplies API is offline";
       isActive = false;
+
+      // Show API offline message and hide other content
+      if (apiOfflineMessage) {
+        apiOfflineMessage.classList.remove("hidden");
+      }
+      if (loggedOutState) {
+        loggedOutState.classList.add("hidden");
+      }
+      if (loggedInState) {
+        loggedInState.classList.add("hidden");
+      }
+
+      // Start auto-retry mechanism when popup is open and API is offline
+      this.startOfflineAutoRetry();
+    } else {
+      // API is online or not checked yet - show normal content
+      if (apiOfflineMessage) {
+        apiOfflineMessage.classList.add("hidden");
+      }
+      if (loggedOutState && !this.isLoggedIn) {
+        loggedOutState.classList.remove("hidden");
+      }
+      if (loggedInState && this.isLoggedIn) {
+        loggedInState.classList.remove("hidden");
+      }
+
+      // Stop auto-retry when API comes back online
+      this.stopOfflineAutoRetry();
     }
 
     // Update all status text elements
@@ -681,9 +799,10 @@ class PopupManager {
     // Show/hide status containers based on API status
     statusContainers.forEach((container) => {
       if (!this.isApiOnline) {
-        container.style.display = "flex";
-      } else {
+        // Hide status containers when API is offline - we show the offline message instead
         container.style.display = "none";
+      } else {
+        container.style.display = "none"; // Always hidden when API is online (no need for status indicator)
       }
     });
 
@@ -723,6 +842,64 @@ class PopupManager {
     console.log("Tone setting saved:", tone);
   }
 
+  startOfflineAutoRetry() {
+    // Only start if not already running
+    if (this.offlineRetryInterval) {
+      return;
+    }
+
+    addVisibleDebug(
+      "[Auto-Retry] Starting automatic API reconnection attempts every 5 seconds"
+    );
+
+    let retryCount = 0;
+
+    this.offlineRetryInterval = setInterval(async () => {
+      if (!this.isApiOnline) {
+        retryCount++;
+        addVisibleDebug(
+          `[Auto-Retry] Attempt #${retryCount} - Attempting to reconnect to API...`
+        );
+
+        // Show visual feedback during retry
+        this.updateRetryStatus(
+          `🔄 Checking connection... (attempt #${retryCount})`
+        );
+
+        await this.checkApiStatus(false); // false = not manual refresh
+
+        if (this.isApiOnline) {
+          addVisibleDebug("[Auto-Retry] API reconnected successfully!");
+          this.showSuccess("Connection restored!");
+          this.stopOfflineAutoRetry();
+        } else {
+          // Reset to default retry message
+          this.updateRetryStatus(
+            "🔄 Automatically retrying every 5 seconds..."
+          );
+        }
+      } else {
+        // If somehow API is online, stop the retry
+        this.stopOfflineAutoRetry();
+      }
+    }, 5000); // Check every 5 seconds
+  }
+
+  stopOfflineAutoRetry() {
+    if (this.offlineRetryInterval) {
+      addVisibleDebug("[Auto-Retry] Stopping automatic reconnection attempts");
+      clearInterval(this.offlineRetryInterval);
+      this.offlineRetryInterval = null;
+    }
+  }
+
+  updateRetryStatus(message) {
+    const retryStatus = document.getElementById("auto-retry-status");
+    if (retryStatus) {
+      retryStatus.textContent = message;
+    }
+  }
+
   async loadTones() {
     addVisibleDebug("[Popup] loadTones() starting...");
 
@@ -748,7 +925,7 @@ class PopupManager {
 
     try {
       let tones;
-      
+
       // Check if we already have tones from preload or cache
       if (this.allTones && this.allTones.length > 0) {
         addVisibleDebug("[Popup] Using existing tones:", this.allTones.length);
@@ -757,7 +934,10 @@ class PopupManager {
         // Check cache first
         const cachedTones = await this.getCachedTones();
         if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
-          addVisibleDebug("[Popup] Using cached tones:", cachedTones.tones.length);
+          addVisibleDebug(
+            "[Popup] Using cached tones:",
+            cachedTones.tones.length
+          );
           tones = cachedTones.tones;
           this.allTones = tones;
         } else {
@@ -1038,7 +1218,12 @@ class PopupManager {
 
   loadToneSetting() {
     chrome.storage.sync.get(
-      ["defaultTone", "useIntegrations", "enableSelectReply", "enableEverywhere"],
+      [
+        "defaultTone",
+        "useIntegrations",
+        "enableSelectReply",
+        "enableEverywhere",
+      ],
       (result) => {
         if (result.defaultTone) {
           this.currentTone = result.defaultTone;
@@ -1052,14 +1237,14 @@ class PopupManager {
         if (typeof result.enableEverywhere === "boolean") {
           this.enableEverywhere = result.enableEverywhere;
         }
-        
+
         const loggedOutSelect = document.getElementById(
           "replyToneSelectLoggedOut"
         );
         const loggedInSelect = document.getElementById("replyToneSelect");
         if (loggedOutSelect) loggedOutSelect.value = this.currentTone;
         if (loggedInSelect) loggedInSelect.value = this.currentTone;
-        
+
         // Update all integration toggles
         document.querySelectorAll(".use-integrations-toggle").forEach((el) => {
           el.checked = this.useIntegrations;
@@ -1067,7 +1252,7 @@ class PopupManager {
         document.querySelectorAll(".use-integrations-status").forEach((el) => {
           el.textContent = this.useIntegrations ? "On" : "Off";
         });
-        
+
         // Update all select reply toggles
         document
           .querySelectorAll(".enable-select-reply-toggle")
@@ -1079,18 +1264,14 @@ class PopupManager {
           .forEach((el) => {
             el.textContent = this.enableSelectReply ? "On" : "Off";
           });
-        
+
         // Update all enable everywhere toggles
-        document
-          .querySelectorAll(".enable-everywhere-toggle")
-          .forEach((el) => {
-            el.checked = this.enableEverywhere;
-          });
-        document
-          .querySelectorAll(".enable-everywhere-status")
-          .forEach((el) => {
-            el.textContent = this.enableEverywhere ? "On" : "Off";
-          });
+        document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
+          el.checked = this.enableEverywhere;
+        });
+        document.querySelectorAll(".enable-everywhere-status").forEach((el) => {
+          el.textContent = this.enableEverywhere ? "On" : "Off";
+        });
       }
     );
   }
@@ -1249,7 +1430,7 @@ class PopupManager {
         this.saveSelectReplySetting(e.target.checked);
       });
     });
-    
+
     document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
       el.addEventListener("change", (e) => {
         this.saveEnableEverywhereSetting(e.target.checked);
@@ -1448,6 +1629,11 @@ class PopupManager {
     const loggedOutState = document.getElementById("loggedOutState");
     const loggedInState = document.getElementById("loggedInState");
 
+    // Don't update UI state if API is offline - let updateExtensionStatus handle it
+    if (this.apiStatusChecked && !this.isApiOnline) {
+      return;
+    }
+
     if (this.isLoggedIn && this.currentUser) {
       // Show logged-in interface
       if (loggedOutState) loggedOutState.classList.add("hidden");
@@ -1535,6 +1721,14 @@ class PopupManager {
     setTimeout(() => {
       notification.remove();
     }, 3000);
+  }
+
+  showPopupContent() {
+    const supportedSiteView = document.getElementById("supported-site-view");
+    if (supportedSiteView) {
+      supportedSiteView.style.display = "block";
+      addVisibleDebug("[Popup] Content now visible after login check");
+    }
   }
 }
 
@@ -1752,6 +1946,14 @@ document.addEventListener("DOMContentLoaded", function () {
     loggedOut: !!loggedOutSelect,
     loggedIn: !!loggedInSelect,
   });
+});
+
+// Cleanup when popup is closed
+window.addEventListener("beforeunload", function () {
+  if (window.popupManager) {
+    addVisibleDebug("[Cleanup] Popup closing, stopping auto-retry");
+    window.popupManager.stopOfflineAutoRetry();
+  }
 });
 
 // Also log when the script is fully parsed

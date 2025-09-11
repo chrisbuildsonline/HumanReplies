@@ -54,7 +54,6 @@
       border-radius: 10px;
       margin-bottom: 8px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      border: 1px solid #1d9bf0;
     }
 
     .feature-icon {
@@ -76,14 +75,6 @@
       border-radius: 10px;
       margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .status.logged-in {
-      border: 1px solid #27ae60;
-    }
-
-    .status.logged-out {
-      border: 1px solid #e74c3c;
     }
 
     .status-text {
@@ -117,11 +108,8 @@
       display: flex;
       align-items: center;
       padding: 14px;
-      background: #fff;
       border-radius: 10px;
       margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      border: 1px solid #27ae60;
     }
 
     .user-avatar {
@@ -233,8 +221,7 @@
       background: #fff;
       border-radius: 10px;
       margin-bottom: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      border: 1px solid #8b5cf6;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     }
 
     .setting-label {
@@ -516,6 +503,48 @@
       align-items: center;
       gap: 8px;
     }
+
+    .api-offline-message {
+      border: 1px solid #ffeaa7;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .api-offline-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #b7791f;
+      margin: 0 0 8px 0;
+    }
+
+    .api-offline-text {
+      font-size: 12px;
+      color: #856404;
+      line-height: 1.4;
+      margin: 0;
+    }
+
+    #auto-retry-status {
+      font-weight: 600;
+      color: #b7791f;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 
@@ -535,8 +564,16 @@
   </div>
 
   <!-- Standard view - only shown when site is supported -->
-  <div id="supported-site-view">
-    <!-- User logged out state -->
+  <div id="supported-site-view" style="display: none;">
+    <!-- API Offline Message -->
+    <div id="api-offline-message" class="api-offline-message hidden">
+      <div class="api-offline-title">🔌 Connection Issue</div>
+      <p class="api-offline-text">
+        The connection to our servers is either under heavy load or temporarily offline.
+        <br><br>
+        <span id="auto-retry-status">🔄 Automatically retrying every 5 seconds...</span>
+      </p>
+    </div> <!-- User logged out state -->
     <div id="loggedOutState">
       <div class="status logged-in extensionStatus" id="extensionStatus">
         <div class="status-indicator logged-in" id="statusIndicator"></div>
@@ -559,7 +596,8 @@
           </select>
           <div class="setting mt-20">
             <div class="setting-label">Enable everywhere</div>
-            <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com, facebook.com. Enable this to work on all websites.</div>
+            <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com,
+              facebook.com. Enable this to work on all websites.</div>
             <div class="setting-toggle-row">
               <label class="toggle-switch" aria-label="Enable everywhere">
                 <input type="checkbox" class="enable-everywhere-toggle" />
@@ -567,24 +605,6 @@
               </label>
               <span class="toggle-status enable-everywhere-status">Off</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="disabled-overlay">
-        <div class="section">
-          <div class="section-title">Logged In Benefits</div>
-          <div class="feature">
-            <span class="feature-icon">📊</span>
-            <span class="feature-text">Track your statistics</span>
-          </div>
-          <div class="feature">
-            <span class="feature-icon">🎨</span>
-            <span class="feature-text">Customize and add own tones</span>
-          </div>
-          <div class="feature">
-            <span class="feature-icon">🗣️</span>
-            <span class="feature-text">Write in your voice</span>
           </div>
         </div>
       </div>
@@ -642,7 +662,8 @@
 
         <div class="setting mt-20">
           <div class="setting-label">Enable everywhere</div>
-          <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com, facebook.com. Enable this to work on all websites.</div>
+          <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com,
+            facebook.com. Enable this to work on all websites.</div>
           <div class="setting-toggle-row">
             <label class="toggle-switch" aria-label="Enable everywhere">
               <input type="checkbox" class="enable-everywhere-toggle" />
@@ -652,14 +673,11 @@
           </div>
         </div>
       </div>
-
-      <div class="footer">
-        <p>Version 1.0.0</p>
-      </div>
     </div>
 
 
     <script type="module" src="config/environment.js"></script>
+    <script type="module" src="core/api-service.js"></script>
     <script type="module" src="popup.js"></script>
   </div> <!-- end supported-site-view -->
 </body>

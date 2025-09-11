@@ -104,6 +104,7 @@ class GenerateReplyRequest(BaseModel):
 class GenerateReplyResponse(BaseModel):
     generated_prompt: str
     generated_response: Optional[str] = None
+    generated_variations: Optional[List[str]] = None  # New: multiple variations
     remaining_replies: Optional[int] = None
     is_limit_reached: bool = False
     service_used: str = "pollinations"

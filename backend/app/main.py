@@ -101,18 +101,8 @@ app.include_router(user_settings.router, prefix="/api/v1")
 # Root endpoint
 @app.get("/")
 async def root():
-    return {
-        "message": "Welcome to the HumanReplies Backend",
-        "docs": "/docs" if settings.environment == "development" else "Documentation disabled in production",
-        "health": "/health",
-        "features": [
-            "Supabase Authentication",
-            "PostgreSQL Data Storage", 
-            "Reply Management",
-            "Dashboard Statistics",
-            "Multi-platform Support"
-        ]
-    }
+    return JSONResponse(status_code=200, content={})
+    
 
 if __name__ == "__main__":
     uvicorn.run(
