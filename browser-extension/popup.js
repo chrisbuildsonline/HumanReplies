@@ -3,13 +3,51 @@ import HumanRepliesAPI from "./core/api-service.js";
 import SupabaseClient from "./supabase-client.js";
 import AuthManager from "./auth-manager.js";
 
+console.log("[Popup] Script file loaded");
+console.log("[Popup] Starting popup.js execution...");
+console.log("[Popup] DOM ready state:", document.readyState);
+
 addVisibleDebug("[Popup] script file loaded");
 addVisibleDebug("[Popup] Starting popup.js execution...");
 
 // Add visible debug info to the page
-function addVisibleDebug(..._parts) {
-  // Logging disabled (stubbed out). Intentionally left blank.
-  return;
+function addVisibleDebug(...parts) {
+  try {
+    const debugArea = document.getElementById("debugArea");
+    if (!debugArea) {
+      console.log("[DEBUG-NO-AREA]", ...parts);
+      return;
+    }
+
+    debugArea.style.display = "block";
+    const timestamp = new Date().toLocaleTimeString();
+    const message = parts
+      .map((p) => {
+        if (typeof p === "object" && p !== null) {
+          try {
+            return JSON.stringify(p, null, 1);
+          } catch {
+            return String(p);
+          }
+        }
+        return String(p);
+      })
+      .join(" ");
+
+    // Clear placeholder text on first real message
+    if (debugArea.textContent.includes("Debug output will appear here")) {
+      debugArea.textContent = "";
+    }
+
+    debugArea.textContent += `[${timestamp}] ${message}\n`;
+    debugArea.scrollTop = debugArea.scrollHeight;
+
+    // Also log to console with more detail
+    console.log("[DEBUG]", timestamp, ...parts);
+  } catch (e) {
+    console.error("[DEBUG ERROR]", e);
+    console.log("[DEBUG FALLBACK]", ...parts);
+  }
 }
 
 function appendDebug(message) {
@@ -24,7 +62,7 @@ function appendDebug(message) {
 }
 class PopupManager {
   constructor() {
-    addVisibleDebug("PopupManager constructor starting");
+    addVisibleDebug("[Constructor] PopupManager constructor starting");
     this.isLoggedIn = false;
     this.currentUser = null;
     this.currentTone = "ask";
@@ -37,10 +75,33 @@ class PopupManager {
     this.enableEverywhere = false; // default OFF (social media only)
     this.offlineRetryInterval = null; // Track auto-retry interval when offline
 
-    // Initialize async
-    this.loadApiStatus(); // Load saved status first
-    this.initializeApi();
-    this.initializeOtherComponents();
+    addVisibleDebug(
+      `[Constructor] Initial state: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
+    );
+
+    // Initialize async - load API status first, then initialize components
+    this.initializeAsync();
+  }
+
+  async initializeAsync() {
+    try {
+      addVisibleDebug("[InitAsync] Starting async initialization");
+
+      // Load API status first to ensure UI can show offline state immediately
+      await this.loadApiStatus();
+      addVisibleDebug(
+        `[InitAsync] API status loaded: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
+      );
+
+      // Then initialize other components
+      await this.initializeApi();
+      this.initializeOtherComponents();
+    } catch (error) {
+      addVisibleDebug("[InitAsync] Initialization error:", error);
+      // Continue with initialization even if API status fails
+      this.initializeApi();
+      this.initializeOtherComponents();
+    }
   }
 
   async initializeApi() {
@@ -88,6 +149,9 @@ class PopupManager {
 
       // Start periodic API status checking (every 30 seconds)
       this.startApiStatusChecking();
+
+      // Set up storage listener to update UI when background updates status
+      this.setupStorageListener();
     } catch (e) {
       addVisibleDebug("HumanRepliesAPI error: " + e.message);
       this.isApiOnline = false;
@@ -101,6 +165,39 @@ class PopupManager {
     setInterval(() => {
       this.checkApiStatus();
     }, 30000);
+  }
+
+  setupStorageListener() {
+    // Listen for storage changes from background script
+    if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === "local" && changes.humanreplies_api_status) {
+          const newStatus = changes.humanreplies_api_status.newValue;
+          const oldStatus = changes.humanreplies_api_status.oldValue;
+
+          if (newStatus && newStatus.isOnline !== this.isApiOnline) {
+            addVisibleDebug(
+              `[StorageListener] API status changed: ${
+                oldStatus?.isOnline ? "online" : "offline"
+              } → ${newStatus.isOnline ? "online" : "offline"}`
+            );
+
+            addVisibleDebug(`[StorageListener] *** STORAGE CHANGED API STATUS ***`);
+            addVisibleDebug(`[StorageListener] Source: ${newStatus.source || 'unknown'}`);
+            addVisibleDebug(`[StorageListener] Setting isApiOnline from ${this.isApiOnline} to ${newStatus.isOnline}`);
+            
+            this.isApiOnline = newStatus.isOnline;
+            this.apiStatusChecked = true;
+            this.updateExtensionStatus();
+
+            if (newStatus.isOnline) {
+              this.showSuccess("API connection restored!");
+            }
+          }
+        }
+      });
+      addVisibleDebug("[StorageListener] Storage change listener set up");
+    }
   }
 
   async checkApiStatus(isManualRefresh = false) {
@@ -124,14 +221,19 @@ class PopupManager {
     try {
       // Use instance checkConnectivity method if available, otherwise fall back to getTones
       if (typeof this.api.checkConnectivity === "function") {
-        addVisibleDebug(`[${refreshType}] Using instance checkConnectivity method`);
+        addVisibleDebug(
+          `[${refreshType}] Using instance checkConnectivity method`
+        );
         const result = await this.api.checkConnectivity();
         this.isApiOnline = result.isOnline;
-        
+
         if (result.error) {
-          addVisibleDebug(`[${refreshType}] Connectivity check error:`, result.error);
+          addVisibleDebug(
+            `[${refreshType}] Connectivity check error:`,
+            result.error
+          );
         }
-        
+
         // If API is online, also load tones to refresh data
         if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
           addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
@@ -146,14 +248,19 @@ class PopupManager {
           }
         }
       } else if (typeof window.checkConnectivity === "function") {
-        addVisibleDebug(`[${refreshType}] Using global checkConnectivity function`);
+        addVisibleDebug(
+          `[${refreshType}] Using global checkConnectivity function`
+        );
         const result = await window.checkConnectivity();
         this.isApiOnline = result.isOnline;
-        
+
         if (result.error) {
-          addVisibleDebug(`[${refreshType}] Connectivity check error:`, result.error);
+          addVisibleDebug(
+            `[${refreshType}] Connectivity check error:`,
+            result.error
+          );
         }
-        
+
         // If API is online, also load tones to refresh data
         if (this.isApiOnline && (!wasOnline || isManualRefresh)) {
           addVisibleDebug(`[${refreshType}] API is online, loading tones...`);
@@ -169,7 +276,9 @@ class PopupManager {
         }
       } else {
         // Fallback to original getTones method
-        addVisibleDebug(`[${refreshType}] Using getTones for connectivity check`);
+        addVisibleDebug(
+          `[${refreshType}] Using getTones for connectivity check`
+        );
         const tones = await this.api.getTones({
           timeoutMs: isManualRefresh ? 5000 : 3000,
           reason: isManualRefresh ? "manual-refresh" : "status-check",
@@ -198,7 +307,6 @@ class PopupManager {
         `[${refreshType}] API is`,
         this.isApiOnline ? "online" : "offline"
       );
-
     } catch (err) {
       this.isApiOnline = false;
       addVisibleDebug(`[${refreshType}] API error:`, {
@@ -214,70 +322,186 @@ class PopupManager {
   }
 
   saveApiStatus() {
-    // Store API status in Chrome storage for other parts of extension to access
+    // Save API status directly to Chrome storage (popup is authoritative for status updates)
     if (typeof chrome !== "undefined" && chrome.storage) {
-      chrome.storage.local
-        .set({
-          humanreplies_api_status: {
-            isOnline: this.isApiOnline,
-            lastChecked: Date.now(),
-          },
-        })
-        .then(() => {
-          addVisibleDebug("[StatusSave] API status saved:", this.isApiOnline ? "online" : "offline");
-        })
-        .catch((err) => {
-          addVisibleDebug("[StatusSave] Error saving API status:", err.message);
-        });
+      try {
+        const statusUpdate = {
+          isOnline: !!this.isApiOnline, // Ensure boolean
+          lastChecked: Date.now(),
+          source: "popup",
+          checkedAt: new Date().toISOString(),
+        };
+
+        addVisibleDebug(`[StatusSave] *** SAVING DIRECTLY TO STORAGE ***`);
+        addVisibleDebug(`[StatusSave] Status object:`, statusUpdate);
+        addVisibleDebug(
+          `[StatusSave] isOnline value: ${
+            statusUpdate.isOnline
+          } (type: ${typeof statusUpdate.isOnline})`
+        );
+
+        chrome.storage.local.set(
+          { humanreplies_api_status: statusUpdate },
+          () => {
+            if (chrome.runtime.lastError) {
+              addVisibleDebug(
+                "[StatusSave] *** STORAGE ERROR ***:",
+                chrome.runtime.lastError.message
+              );
+            } else {
+              addVisibleDebug(
+                `[StatusSave] *** STORAGE SUCCESS *** API status saved: ${
+                  statusUpdate.isOnline ? "ONLINE" : "OFFLINE"
+                }`
+              );
+              addVisibleDebug(
+                `[StatusSave] Timestamp: ${statusUpdate.lastChecked}`
+              );
+
+              // Verify the save worked by immediately reading it back
+              chrome.storage.local.get(
+                ["humanreplies_api_status"],
+                (result) => {
+                  addVisibleDebug("[StatusSave] *** VERIFICATION READ ***:");
+                  addVisibleDebug(
+                    `[StatusSave] Read back from storage:`,
+                    result
+                  );
+                  if (result.humanreplies_api_status) {
+                    addVisibleDebug(
+                      `[StatusSave] Verified isOnline: ${result.humanreplies_api_status.isOnline}`
+                    );
+                  } else {
+                    addVisibleDebug(
+                      "[StatusSave] *** WARNING: Could not read back saved status! ***"
+                    );
+                  }
+                }
+              );
+            }
+          }
+        );
+      } catch (e) {
+        addVisibleDebug(
+          "[StatusSave] *** EXCEPTION SAVING TO STORAGE ***:",
+          e.message
+        );
+      }
+    } else {
+      addVisibleDebug("[StatusSave] *** Chrome storage not available! ***");
     }
   }
 
   async loadApiStatus() {
-    // First try to load cached status, only do live check if cache is stale
-    addVisibleDebug("[StatusLoad] Loading API status from storage...");
-    
+    addVisibleDebug("[LoadAPIStatus] === LOADING API STATUS FROM STORAGE ===");
+
+    // First, let's see what's actually in ALL of Chrome storage
     try {
-      const result = await new Promise((resolve, reject) => {
+      addVisibleDebug("[LoadAPIStatus] Checking ALL Chrome local storage contents...");
+      const allStorage = await new Promise((resolve) => {
         if (typeof chrome !== "undefined" && chrome.storage) {
-          chrome.storage.local.get(["humanreplies_api_status"], (result) => {
-            if (chrome.runtime.lastError) {
-              reject(chrome.runtime.lastError);
-            } else {
-              resolve(result);
-            }
+          chrome.storage.local.get(null, (result) => {
+            resolve(result);
           });
         } else {
           resolve({});
         }
       });
+      addVisibleDebug("[LoadAPIStatus] ALL storage contents:", allStorage);
+      addVisibleDebug("[LoadAPIStatus] Storage keys:", Object.keys(allStorage));
+      
+      // Now specifically get the humanreplies_api_status
+      const result = await new Promise((resolve, reject) => {
+        if (typeof chrome !== "undefined" && chrome.storage) {
+          addVisibleDebug("[LoadAPIStatus] Chrome storage available, getting humanreplies_api_status");
+          chrome.storage.local.get(["humanreplies_api_status"], (result) => {
+            if (chrome.runtime.lastError) {
+              addVisibleDebug("[LoadAPIStatus] Chrome error:", chrome.runtime.lastError.message);
+              reject(chrome.runtime.lastError);
+            } else {
+              addVisibleDebug("[LoadAPIStatus] Chrome storage result:", result);
+              resolve(result);
+            }
+          });
+        } else {
+          addVisibleDebug("[LoadAPIStatus] Chrome storage not available");
+          resolve({});
+        }
+      });
 
+      addVisibleDebug(`[LoadAPIStatus] Checking if result.humanreplies_api_status exists:`, !!result.humanreplies_api_status);
+      addVisibleDebug(`[LoadAPIStatus] Result object keys:`, Object.keys(result));
+      
       if (result.humanreplies_api_status) {
         const status = result.humanreplies_api_status;
-        const age = Date.now() - status.lastChecked;
+        const age = Date.now() - (status.lastChecked || 0);
         const isRecent = age < 30000; // 30 seconds
+        
+        addVisibleDebug(`[LoadAPIStatus] *** FOUND EXISTING STATUS IN STORAGE ***`);
+        addVisibleDebug(`[LoadAPIStatus] Status object:`, status);
+        addVisibleDebug(`[LoadAPIStatus] isOnline value:`, status.isOnline, `(type: ${typeof status.isOnline})`);
+        addVisibleDebug(`[LoadAPIStatus] Status age: ${age}ms, isRecent: ${isRecent}`);
 
+        // Always use the cached status as initial state, regardless of age
+        this.isApiOnline = !!status.isOnline; // Ensure boolean
+        this.apiStatusChecked = true;
+        
+        addVisibleDebug(
+          `[LoadAPIStatus] *** SETTING INITIAL STATE FROM STORAGE: ${this.isApiOnline ? 'ONLINE' : 'OFFLINE'} ***`
+        );
+        
+        this.updateExtensionStatus();
+        
         if (isRecent) {
-          // Use cached status if it's recent
-          this.isApiOnline = status.isOnline;
-          this.apiStatusChecked = true;
-          addVisibleDebug(`[StatusLoad] Using cached status (${age}ms old):`, status.isOnline ? "online" : "offline");
-          this.updateExtensionStatus();
+          addVisibleDebug(`[LoadAPIStatus] Status is recent (${Math.round(age/1000)}s old), no background check needed`);
           return;
         } else {
-          addVisibleDebug(`[StatusLoad] Cached status is stale (${age}ms old), performing live check`);
+          addVisibleDebug(
+            `[LoadAPIStatus] Status is stale (${Math.round(age/1000)}s old), requesting background refresh but keeping current UI`
+          );
+          // Don't change the UI state here - let background update it if status changes
         }
       } else {
-        addVisibleDebug("[StatusLoad] No cached status found, performing live check");
+        addVisibleDebug(
+          "[LoadAPIStatus] *** NO CACHED STATUS FOUND - DEFAULTING TO OFFLINE ***"
+        );
+        addVisibleDebug(`[LoadAPIStatus] Result was:`, result);
+        this.isApiOnline = false;
+        this.apiStatusChecked = true;
+        
+        // IMPORTANT: Save offline status to storage so other components know about it
+        addVisibleDebug("[LoadAPIStatus] *** SAVING OFFLINE STATUS TO STORAGE ***");
+        this.saveApiStatus();
+        
+        this.updateExtensionStatus();
       }
     } catch (err) {
-      addVisibleDebug("[StatusLoad] Error loading cached status:", err.message);
+      addVisibleDebug("[LoadAPIStatus] Error loading cached status:", err.message);
+      // Assume offline if we can't read storage
+      this.isApiOnline = false;
+      this.apiStatusChecked = true;
+      
+      // IMPORTANT: Save offline status to storage so other components know about it
+      addVisibleDebug("[LoadAPIStatus] *** SAVING OFFLINE STATUS TO STORAGE (ERROR CASE) ***");
+      this.saveApiStatus();
+      
+      this.updateExtensionStatus();
     }
-
-    // Fall back to live check if no recent cached status
-    this.isApiOnline = false;
-    this.apiStatusChecked = false;
-    this.updateExtensionStatus();
-    await this.checkApiStatus(false);
+    
+    // Ask background script to perform fresh check (but don't wait for it)
+    if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+      try {
+        addVisibleDebug("[LoadAPIStatus] Requesting background connectivity refresh (async)");
+        chrome.runtime.sendMessage({ action: "refreshConnectivity" }, (response) => {
+          addVisibleDebug("[LoadAPIStatus] Background response:", response);
+          if (response && response.success) {
+            addVisibleDebug("[LoadAPIStatus] Background refresh initiated successfully");
+          }
+        });
+      } catch (e) {
+        addVisibleDebug("[LoadAPIStatus] Failed to request background refresh:", e.message);
+      }
+    }
   }
 
   async preloadTones() {
@@ -301,10 +525,13 @@ class PopupManager {
           cachedTones.tones.length
         );
         this.allTones = cachedTones.tones;
-        this.isApiOnline = true;
-        this.apiStatusChecked = true;
-        this.saveApiStatus();
-        this.updateExtensionStatus();
+
+        addVisibleDebug("[EarlyTones] *** CACHED TONES FOUND - BUT NOT SETTING API ONLINE ***");
+        addVisibleDebug("[EarlyTones] Cached tones only mean we have offline fallback data, not that API is online");
+        addVisibleDebug(`[EarlyTones] Current API status: ${this.isApiOnline ? 'online' : 'offline'}, checked: ${this.apiStatusChecked}`);
+        
+        // DO NOT set API online based on cached tones - cached tones are fallback data
+        // The background script will determine actual API connectivity
         return;
       }
 
@@ -318,10 +545,16 @@ class PopupManager {
       // Cache the tones
       await this.cacheTones(tones);
 
-      this.isApiOnline = true;
-      this.apiStatusChecked = true;
-      this.saveApiStatus();
-      this.updateExtensionStatus(); // Update UI with online status
+      // Only set online status if not already checked, or if we successfully got fresh tones
+      if (!this.apiStatusChecked || tones.length > 0) {
+        addVisibleDebug("[EarlyTones] *** SETTING API ONLINE BASED ON FRESH TONES ***");
+        addVisibleDebug(`[EarlyTones] apiStatusChecked: ${this.apiStatusChecked}, tones.length: ${tones.length}`);
+        addVisibleDebug("[EarlyTones] This should only happen if we successfully fetched fresh tones from API!");
+        this.isApiOnline = true;
+        this.apiStatusChecked = true;
+        this.saveApiStatus();
+        this.updateExtensionStatus(); // Update UI with online status
+      }
     } catch (err) {
       addVisibleDebug("[EarlyTones] Error fetching tones:", err.message);
 
@@ -332,10 +565,14 @@ class PopupManager {
         this.allTones = cachedTones.tones;
       }
 
-      this.isApiOnline = false;
-      this.apiStatusChecked = true;
-      this.saveApiStatus();
-      this.updateExtensionStatus(); // Update UI with offline status
+      // Only override status if not already checked, or if this confirms offline status
+      if (!this.apiStatusChecked || !this.isApiOnline) {
+        addVisibleDebug("[EarlyTones] Setting API offline due to error");
+        this.isApiOnline = false;
+        this.apiStatusChecked = true;
+        this.saveApiStatus();
+        this.updateExtensionStatus(); // Update UI with offline status
+      }
     }
   }
 
@@ -469,7 +706,7 @@ class PopupManager {
     this.updateUIState();
     this.loadToneSetting();
     this.setupEventListeners();
-    
+
     // Show the popup content after login check is complete
     this.showPopupContent();
 
@@ -691,33 +928,67 @@ class PopupManager {
     let isActive = false;
 
     // Priority: API status first, then site support
+    addVisibleDebug(
+      `[UpdateStatus] Checking condition: apiStatusChecked=${
+        this.apiStatusChecked
+      } && !isApiOnline=${!this.isApiOnline}`
+    );
+
     if (this.apiStatusChecked && !this.isApiOnline) {
       statusText = "HumanReplies API is offline";
       isActive = false;
 
+      addVisibleDebug(
+        `[UpdateStatus] *** CONDITION MET: Showing offline state ***`
+      );
+
       // Show API offline message and hide other content
       if (apiOfflineMessage) {
+        addVisibleDebug(
+          `[UpdateStatus] Removing 'hidden' class from offline message`
+        );
         apiOfflineMessage.classList.remove("hidden");
+        addVisibleDebug(
+          `[UpdateStatus] Offline message classes after remove: "${apiOfflineMessage.className}"`
+        );
+        addVisibleDebug(
+          `[UpdateStatus] Offline message display style: "${
+            getComputedStyle(apiOfflineMessage).display
+          }"`
+        );
+      } else {
+        addVisibleDebug(
+          `[UpdateStatus] *** ERROR: apiOfflineMessage element not found! ***`
+        );
       }
+
       if (loggedOutState) {
         loggedOutState.classList.add("hidden");
+        addVisibleDebug(`[UpdateStatus] Hid logged out state`);
       }
       if (loggedInState) {
         loggedInState.classList.add("hidden");
+        addVisibleDebug(`[UpdateStatus] Hid logged in state`);
       }
 
       // Start auto-retry mechanism when popup is open and API is offline
+      addVisibleDebug(`[UpdateStatus] Starting auto-retry mechanism`);
       this.startOfflineAutoRetry();
     } else {
       // API is online or not checked yet - show normal content
+      addVisibleDebug(`[UpdateStatus] Showing online/normal state`);
+
       if (apiOfflineMessage) {
         apiOfflineMessage.classList.add("hidden");
+        addVisibleDebug(`[UpdateStatus] Hid offline message`);
       }
       if (loggedOutState && !this.isLoggedIn) {
         loggedOutState.classList.remove("hidden");
+        addVisibleDebug(`[UpdateStatus] Showed logged out state`);
       }
       if (loggedInState && this.isLoggedIn) {
         loggedInState.classList.remove("hidden");
+        addVisibleDebug(`[UpdateStatus] Showed logged in state`);
       }
 
       // Stop auto-retry when API comes back online
@@ -1626,12 +1897,34 @@ class PopupManager {
       this.currentUser
     ); // Debug logging
 
+    addVisibleDebug(`[UpdateUIState] ===== CALLED =====`);
+    addVisibleDebug(
+      `[UpdateUIState] API Status: online=${this.isApiOnline}, checked=${this.apiStatusChecked}`
+    );
+
     const loggedOutState = document.getElementById("loggedOutState");
     const loggedInState = document.getElementById("loggedInState");
+    const apiOfflineMessage = document.getElementById("api-offline-message");
+
+    addVisibleDebug(
+      `[UpdateUIState] Elements: loggedOut=${!!loggedOutState}, loggedIn=${!!loggedInState}, offlineMsg=${!!apiOfflineMessage}`
+    );
 
     // Don't update UI state if API is offline - let updateExtensionStatus handle it
     if (this.apiStatusChecked && !this.isApiOnline) {
+      addVisibleDebug(
+        "[UpdateUIState] *** API IS OFFLINE - SKIPPING UI STATE UPDATE ***"
+      );
+      if (apiOfflineMessage) {
+        addVisibleDebug(
+          `[UpdateUIState] Offline message current classes: "${apiOfflineMessage.className}"`
+        );
+      }
       return;
+    } else {
+      addVisibleDebug(
+        `[UpdateUIState] API is online or not checked, proceeding with normal UI update`
+      );
     }
 
     if (this.isLoggedIn && this.currentUser) {

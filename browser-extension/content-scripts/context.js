@@ -20,7 +20,7 @@ async function safeChromeStorageGet(storageType, keys) {
     console.warn("Chrome APIs not available, skipping storage operation");
     return {};
   }
-  
+
   try {
     return await new Promise((resolve) => {
       chrome.storage[storageType].get(keys, resolve);
@@ -36,7 +36,7 @@ async function safeChromeStorageSet(storageType, data) {
     console.warn("Chrome APIs not available, skipping storage operation");
     return;
   }
-  
+
   try {
     await new Promise((resolve) => {
       chrome.storage[storageType].set(data, resolve);
@@ -47,16 +47,25 @@ async function safeChromeStorageSet(storageType, data) {
 }
 
 // Helper function to update API status without triggering feedback loops
-async function updateApiStatus(isOnline) {
+async function updateApiStatus(isOnline, source = "content-script") {
   isUpdatingApiStatus = true;
   try {
+    const statusUpdate = {
+      isOnline: !!isOnline, // Ensure boolean
+      lastChecked: Date.now(),
+      source: source,
+      checkedAt: new Date().toISOString()
+    };
+    
     await safeChromeStorageSet("local", {
-      humanreplies_api_status: {
-        isOnline: isOnline,
-        lastChecked: Date.now(),
-      },
+      humanreplies_api_status: statusUpdate
     });
-    console.log("API status set to", isOnline ? "online" : "offline");
+    
+    console.log(`[Context] API status set to ${isOnline ? "online" : "offline"} by ${source}`);
+    console.log(`[Context] Status object:`, statusUpdate);
+    
+    // Update local state
+    isApiOnline = isOnline;
   } finally {
     // Reset flag after a short delay to allow storage event to process
     setTimeout(() => {
@@ -79,7 +88,9 @@ const fallbackTones = [
 // Load tones from localStorage
 async function loadTonesFromStorage() {
   try {
-    const result = await safeChromeStorageGet("local", ["humanreplies_tones_cache"]);
+    const result = await safeChromeStorageGet("local", [
+      "humanreplies_tones_cache",
+    ]);
 
     if (
       result.humanreplies_tones_cache &&
@@ -142,7 +153,9 @@ async function loadDefaultToneSetting() {
 // Load API status from storage
 async function loadApiStatus() {
   try {
-    const result = await safeChromeStorageGet("local", ["humanreplies_api_status"]);
+    const result = await safeChromeStorageGet("local", [
+      "humanreplies_api_status",
+    ]);
 
     if (result.humanreplies_api_status) {
       const status = result.humanreplies_api_status;
@@ -152,7 +165,9 @@ async function loadApiStatus() {
         isApiOnline = status.isOnline;
         console.log("Loaded API status:", isApiOnline ? "online" : "offline");
       } else {
-        console.log("API status cache expired, assuming offline until live check");
+        console.log(
+          "API status cache expired, assuming offline until live check"
+        );
         isApiOnline = false;
       }
     } else {
@@ -785,7 +800,9 @@ async function handleReplyGeneration(tone) {
     // Check if chrome.runtime is available
     if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
       hideLoadingBox();
-      showErrorBox("Extension is not properly loaded. Please refresh the page and try again.");
+      showErrorBox(
+        "Extension is not properly loaded. Please refresh the page and try again."
+      );
       return;
     }
 
@@ -818,7 +835,7 @@ async function handleReplyGeneration(tone) {
         setTimeout(() => {
           reject(new Error("Reply generation timed out after 5 seconds"));
         }, 5000);
-      })
+      }),
     ]);
 
     hideLoadingBox();
@@ -844,54 +861,64 @@ async function handleReplyGeneration(tone) {
     } else {
       const errorMessage = response?.error || "Unknown error occurred";
       console.error("Reply generation failed:", errorMessage);
-      
+
       // Trigger connectivity check when reply generation fails
       if (typeof window.checkConnectivity === "function") {
         console.log("Reply failed, checking API connectivity...");
-        window.checkConnectivity().then((result) => {
-          isApiOnline = result.isOnline;
-          if (!result.isOnline) {
-            console.log("API confirmed offline, starting polling");
+        window
+          .checkConnectivity()
+          .then((result) => {
+            if (!result.isOnline) {
+              console.log("API confirmed offline, starting polling");
+              updateApiStatus(false, "reply-failure-check");
+              startOfflineStatusPolling();
+            }
+          })
+          .catch((error) => {
+            console.error("Connectivity check failed:", error);
+            updateApiStatus(false, "reply-failure-error");
             startOfflineStatusPolling();
-          }
-        }).catch((error) => {
-          console.error("Connectivity check failed:", error);
-          isApiOnline = false;
-          startOfflineStatusPolling();
-        });
+          });
       } else {
         // Fallback: Mark API as offline in storage for robust status propagation
-        await updateApiStatus(false);
+        console.log("Reply generation failed, marking API as offline");
+        await updateApiStatus(false, "reply-generation-failure");
+        startOfflineStatusPolling();
       }
-      
+
       showErrorBox(errorMessage);
     }
   } catch (error) {
     console.error("Reply generation failed:", error);
     hideLoadingBox();
-    
+
     // Handle timeout specifically
     if (error.message && error.message.includes("timed out")) {
       console.log("Reply generation timed out, checking API connectivity...");
-      
+
       // Trigger connectivity check when timeout occurs
       if (typeof window.checkConnectivity === "function") {
-        window.checkConnectivity().then((result) => {
-          isApiOnline = result.isOnline;
-          if (!result.isOnline) {
-            console.log("API confirmed offline after timeout");
+        window
+          .checkConnectivity()
+          .then((result) => {
+            if (!result.isOnline) {
+              console.log("API confirmed offline after timeout");
+              updateApiStatus(false, "timeout-check");
+              startOfflineStatusPolling();
+            }
+          })
+          .catch((connectivityError) => {
+            console.error("Connectivity check failed:", connectivityError);
+            updateApiStatus(false, "timeout-error");
             startOfflineStatusPolling();
-          }
-        }).catch((connectivityError) => {
-          console.error("Connectivity check failed:", connectivityError);
-          isApiOnline = false;
-          startOfflineStatusPolling();
-        });
+          });
       } else {
         // Fallback: Mark API as offline in storage
-        await updateApiStatus(false);
+        console.log("Reply generation timed out, marking API as offline");
+        await updateApiStatus(false, "reply-timeout");
+        startOfflineStatusPolling();
       }
-      
+
       showErrorBox("Reply generation timed out. The API might be offline.");
     } else {
       showErrorBox("We couldn't generate a reply now, try again later");
@@ -935,21 +962,48 @@ if (isChromeApiAvailable()) {
     if (namespace === "local" && changes.humanreplies_api_status) {
       // Ignore storage changes we caused ourselves to prevent feedback loops
       if (isUpdatingApiStatus) {
-        console.log("Ignoring API status change (self-update)");
+        console.log("[Context] Ignoring API status change (self-update)");
         return;
       }
+
+      const newStatus = changes.humanreplies_api_status.newValue;
+      const oldStatus = changes.humanreplies_api_status.oldValue;
       
-      console.log("API status changed, reloading");
-      loadApiStatus().then(() => {
-        // Hide reply button if API went offline
+      console.log("[Context] *** API STATUS CHANGED IN STORAGE ***");
+      console.log(`[Context] Old status: ${oldStatus?.isOnline ? 'online' : 'offline'} (source: ${oldStatus?.source || 'unknown'})`);
+      console.log(`[Context] New status: ${newStatus?.isOnline ? 'online' : 'offline'} (source: ${newStatus?.source || 'unknown'})`);
+      console.log(`[Context] New status object:`, newStatus);
+      
+      // Update local state immediately
+      if (newStatus && newStatus.isOnline !== isApiOnline) {
+        const wasOnline = isApiOnline;
+        isApiOnline = !!newStatus.isOnline;
+        
+        console.log(`[Context] *** UPDATING LOCAL STATE: ${wasOnline ? 'online' : 'offline'} → ${isApiOnline ? 'online' : 'offline'} ***`);
+        
+        // Update UI visibility based on new status
         if (!shouldBeActive()) {
+          console.log("[Context] API went offline, hiding reply button and stopping features");
           hideReplyButton();
           if (toneMenu) {
             toneMenu.remove();
             toneMenu = null;
           }
+          if (!wasOnline) {
+            // If was already offline, start polling for reconnection
+            startOfflineStatusPolling();
+          }
+        } else if (isApiOnline && !wasOnline) {
+          console.log("[Context] API came back online, re-enabling features");
+          // Stop offline polling if it was running
+          if (offlineStatusInterval) {
+            clearInterval(offlineStatusInterval);
+            offlineStatusInterval = null;
+          }
+          // Re-initialize to enable features
+          initialize();
         }
-      });
+      }
     }
 
     if (namespace === "sync" && changes.enableEverywhere) {

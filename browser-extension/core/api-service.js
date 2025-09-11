@@ -174,12 +174,15 @@ class HumanRepliesAPI {
         const rawReply = (await pollinationsResponse.text())
           .trim()
           .replace(/^["']|["']$/g, "");
-        
+
         // Try to parse JSON response with variations
         let variations = null;
         try {
           const parsedResponse = JSON.parse(rawReply);
-          if (parsedResponse.variations && Array.isArray(parsedResponse.variations)) {
+          if (
+            parsedResponse.variations &&
+            Array.isArray(parsedResponse.variations)
+          ) {
             variations = parsedResponse.variations;
             finalReply = variations[0]; // Use first variation as default reply
           } else {
@@ -189,7 +192,7 @@ class HumanRepliesAPI {
           // If JSON parsing fails, use raw response as single reply
           finalReply = rawReply;
         }
-        
+
         serviceUsed = "pollinations";
       }
 
@@ -544,8 +547,8 @@ class HumanRepliesAPI {
 
       // Extract base server URL (remove /api/v1 suffix if present)
       let serverBaseURL = this.baseURL;
-      if (serverBaseURL.endsWith('/api/v1')) {
-        serverBaseURL = serverBaseURL.replace('/api/v1', '');
+      if (serverBaseURL.endsWith("/api/v1")) {
+        serverBaseURL = serverBaseURL.replace("/api/v1", "");
       }
 
       const healthUrl = `${serverBaseURL}/health`;
@@ -556,58 +559,76 @@ class HumanRepliesAPI {
       );
 
       const isOnline = response.ok;
-      return { 
-        isOnline, 
+      return {
+        isOnline,
         status: response.status,
-        error: isOnline ? null : `HTTP ${response.status}`
+        error: isOnline ? null : `HTTP ${response.status}`,
       };
     } catch (error) {
       const message = (error && error.message) || String(error);
-      return { 
-        isOnline: false, 
-        error: message
+      return {
+        isOnline: false,
+        error: message,
       };
     }
   }
 }
 
 // Global connectivity function that can be called from anywhere
-window.checkConnectivity = async function() {
+window.checkConnectivity = async function () {
   try {
     // Use window.EnvironmentConfig if available
     const envConfig = window.EnvironmentConfig || null;
     const api = new HumanRepliesAPI(envConfig);
-    
+
     const result = await api.checkConnectivity();
-    
+
     // Update API status in chrome storage
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.storage &&
+      chrome.storage.local
+    ) {
       chrome.storage.local.set({
         humanreplies_api_status: {
           isOnline: result.isOnline,
           lastChecked: Date.now(),
-          error: result.error || null
-        }
+          error: result.error || null,
+        },
       });
     }
-    
-    console.log("[checkConnectivity] API status:", result.isOnline ? "online" : "offline", result.error || "");
+
+    console.log(
+      "[checkConnectivity] API status:",
+      result.isOnline ? "online" : "offline",
+      result.error || ""
+    );
     return result;
   } catch (error) {
-    console.error("[checkConnectivity] Failed to check API connectivity:", error);
-    
+    console.error(
+      "[checkConnectivity] Failed to check API connectivity:",
+      error
+    );
+
     // Set offline status on error
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.storage &&
+      chrome.storage.local
+    ) {
       chrome.storage.local.set({
         humanreplies_api_status: {
           isOnline: false,
           lastChecked: Date.now(),
-          error: error.message || "Connectivity check failed"
-        }
+          error: error.message || "Connectivity check failed",
+        },
       });
     }
-    
-    return { isOnline: false, error: error.message || "Connectivity check failed" };
+
+    return {
+      isOnline: false,
+      error: error.message || "Connectivity check failed",
+    };
   }
 };
 

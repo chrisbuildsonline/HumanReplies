@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Clear Extension Storage</title>
+</head>
+
+<body>
+    <h1>Clear HumanReplies Extension Storage</h1>
+    <button onclick="clearStorage()">Clear Storage</button>
+    <div id="result"></div>
+
+    <script>
+        async function clearStorage() {
+            try {
+                // Clear all extension storage
+                await chrome.storage.local.clear();
+                await chrome.storage.sync.clear();
+
+                document.getElementById('result').innerHTML = '<p style="color: green;">Storage cleared successfully!</p>';
+                console.log('Extension storage cleared');
+            } catch (error) {
+                document.getElementById('result').innerHTML = '<p style="color: red;">Error: ' + error.message + '</p>';
+                console.error('Error clearing storage:', error);
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -31,8 +31,11 @@ initializeApiService()
 
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("[BG] Received message:", request);
+  console.log("[BG] Sender:", sender);
+
   if (request && request.action) {
-    console.log("[BG] Received action:", request.action);
+    console.log("[BG] Processing action:", request.action);
   }
 
   if (request.action === "authUpdated") {
@@ -44,23 +47,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       isAuthenticated: !!request.data?.userToken,
       updatedAt: Date.now(),
     };
-    chrome.storage.local.set({ HR_BG_AUTH_CACHE: currentAuthState });
     console.log("[BG] Auth cache updated");
     sendResponse({ ok: true });
     return true;
   }
 
   if (request.action === "getAuthState") {
-    // Lazy load from local storage if memory empty (after SW wake)
-    if (!currentAuthState) {
-      chrome.storage.local.get(["HR_BG_AUTH_CACHE"], (res) => {
-        if (res.HR_BG_AUTH_CACHE) {
-          currentAuthState = res.HR_BG_AUTH_CACHE;
-        }
-        sendResponse({ auth: currentAuthState });
-      });
-      return true; // async
-    }
+    // Return current auth state from memory
     sendResponse({ auth: currentAuthState });
     return true;
   }
@@ -143,6 +136,147 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep message channel open for async response
+  }
+
+  if (request.action === "updateApiStatus") {
+    console.log("[BG] updateApiStatus request:", request);
+
+    // Update API status in storage (popup is notifying us of a status change)
+    const statusUpdate = {
+      isOnline: !!request.isOnline,
+      lastChecked: Date.now(),
+      source: request.source || "popup",
+    };
+
+    console.log("[BG] Updating storage with:", statusUpdate);
+
+    chrome.storage.local.set({ humanreplies_api_status: statusUpdate }, () => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "[BG] Failed to update API status:",
+          chrome.runtime.lastError
+        );
+        sendResponse({
+          success: false,
+          error: chrome.runtime.lastError.message,
+        });
+      } else {
+        console.log(
+          "[BG] API status updated by",
+          request.source,
+          "->",
+          request.isOnline ? "online" : "offline"
+        );
+        console.log("[BG] Storage update successful");
+        sendResponse({ success: true });
+      }
+    });
+    return true;
+  }
+
+  if (request.action === "refreshConnectivity") {
+    console.log(
+      "[BG] refreshConnectivity request from:",
+      sender.tab ? "content script" : "popup"
+    );
+    console.log("[BG] Full request:", request);
+
+    // Try to do a simple connectivity check by testing the API endpoint
+    initializeApiService()
+      .then(async (api) => {
+        try {
+          console.log("[BG] Testing API connectivity...");
+
+          // Try a simple fetch to the API base URL with short timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+          const response = await fetch(api.getBaseURL() + "/health", {
+            method: "GET",
+            signal: controller.signal,
+            headers: { "Content-Type": "application/json" },
+          });
+
+          clearTimeout(timeoutId);
+
+          const isOnline = response.ok;
+          console.log(
+            "[BG] API connectivity test result:",
+            isOnline ? "online" : "offline"
+          );
+
+          const statusUpdate = {
+            isOnline: isOnline,
+            lastChecked: Date.now(),
+            source: "background-connectivity-check",
+          };
+
+          chrome.storage.local.set(
+            { humanreplies_api_status: statusUpdate },
+            () => {
+              if (chrome.runtime.lastError) {
+                console.error(
+                  "[BG] Failed to update status:",
+                  chrome.runtime.lastError
+                );
+                sendResponse({
+                  success: false,
+                  error: chrome.runtime.lastError.message,
+                });
+              } else {
+                console.log(
+                  "[BG] Connectivity status updated:",
+                  isOnline ? "online" : "offline"
+                );
+                sendResponse({ success: true, isOnline: isOnline });
+              }
+            }
+          );
+        } catch (error) {
+          console.log("[BG] API connectivity test failed:", error.message);
+
+          const statusUpdate = {
+            isOnline: false,
+            lastChecked: Date.now(),
+            source: "background-connectivity-check",
+            error: error.message,
+          };
+
+          chrome.storage.local.set(
+            { humanreplies_api_status: statusUpdate },
+            () => {
+              if (chrome.runtime.lastError) {
+                console.error(
+                  "[BG] Failed to update status:",
+                  chrome.runtime.lastError
+                );
+                sendResponse({
+                  success: false,
+                  error: chrome.runtime.lastError.message,
+                });
+              } else {
+                console.log(
+                  "[BG] Connectivity status updated: offline (error)"
+                );
+                sendResponse({
+                  success: true,
+                  isOnline: false,
+                  error: error.message,
+                });
+              }
+            }
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("[BG] Failed to initialize API service:", error);
+        sendResponse({
+          success: false,
+          error: "Failed to initialize API service",
+        });
+      });
+
+    return true;
   }
 });
 

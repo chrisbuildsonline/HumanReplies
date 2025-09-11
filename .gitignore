@@ -27,3 +27,5 @@ extension/icons/*.png
 .env*
 
 .next
+
+frontend
