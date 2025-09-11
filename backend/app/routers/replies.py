@@ -4,6 +4,7 @@ from sqlalchemy import select, func, and_, desc
 from app.models import Reply, User, ReplyCreate, ReplyResponse, DashboardStats, RecentActivity
 from app.database import get_db
 from app.auth import get_current_user, get_optional_user
+from app.cache import redis_cache
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
@@ -303,4 +304,33 @@ async def delete_reply_analytics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete reply analytics: {str(e)}"
+        )
+
+@router.get("/count")
+async def get_total_replies(db: AsyncSession = Depends(get_db)):
+    """Get total count of all replies in the system - cached for 5 minutes"""
+    try:
+        cache_key = "total_replies_count"
+        
+        async def load_total_count():
+            result = await db.execute(select(func.count(Reply.id)))
+            return result.scalar() or 0
+        
+        # Use Redis cache with 5 minute (300 seconds) TTL
+        total_count, was_cached = await redis_cache.cached(
+            cache_key, 
+            300,  # 5 minutes
+            load_total_count
+        )
+        
+        return {
+            "success": True,
+            "total_replies": total_count,
+            "cached": was_cached
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch total replies count: {str(e)}"
         )
