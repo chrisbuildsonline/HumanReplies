@@ -51,6 +51,7 @@ export function SettingsContent() {
 
   // Reddit import states
   const [isImportingReddit, setIsImportingReddit] = useState(false);
+  const [redditConfigured, setRedditConfigured] = useState<boolean | null>(null);
 
   // User settings states
   const [guardianText, setGuardianText] = useState("");
@@ -74,6 +75,7 @@ export function SettingsContent() {
     loadUserSettings();
     loadCustomTones();
     loadWritingStyle();
+    checkRedditConfig();
   }, []);
 
   // Handle Reddit OAuth callback
@@ -166,6 +168,21 @@ export function SettingsContent() {
       }
     } catch (error) {
       console.error("Failed to load writing style:", error);
+    }
+  };
+
+  const checkRedditConfig = async () => {
+    try {
+      const response = await fetch("/api/reddit/config");
+      if (response.ok) {
+        const data = await response.json();
+        setRedditConfigured(data.configured || false);
+      } else {
+        setRedditConfigured(false);
+      }
+    } catch (error) {
+      console.error("Failed to check Reddit config:", error);
+      setRedditConfigured(false);
     }
   };
 
@@ -745,15 +762,17 @@ export function SettingsContent() {
                       {isAnalyzing ? "Analyzing..." : "Analyze Style"}
                     </Button>
 
-                    <Button
-                      onClick={importFromReddit}
-                      disabled={isImportingReddit}
-                      className="chunky-button bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      {isImportingReddit
-                        ? "Importing..."
-                        : "Import comments from Reddit"}
-                    </Button>
+                    {redditConfigured && (
+                      <Button
+                        onClick={importFromReddit}
+                        disabled={isImportingReddit}
+                        className="chunky-button bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {isImportingReddit
+                          ? "Importing..."
+                          : "Import comments from Reddit"}
+                      </Button>
+                    )}
                   </div>
 
                   {/* Style Analysis Results */}
