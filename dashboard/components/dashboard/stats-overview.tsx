@@ -7,22 +7,35 @@ interface Reply {
   created_at: string
 }
 
-interface StatsOverviewProps {
-  replies: Reply[]
+interface DashboardStats {
+  total_replies: number
+  today_replies: number
+  week_replies: number
+  month_replies: number
 }
 
-export function StatsOverview({ replies }: StatsOverviewProps) {
-  const totalReplies = replies.length
-  const today = new Date().toISOString().split("T")[0]
-  const todayReplies = replies.filter((reply) => reply.reply_date === today).length
+interface StatsOverviewProps {
+  replies: Reply[]
+  dashboardStats?: DashboardStats | null
+}
 
-  const thisWeek = new Date()
-  thisWeek.setDate(thisWeek.getDate() - 7)
-  const weekReplies = replies.filter((reply) => new Date(reply.reply_date) >= thisWeek).length
-
-  const thisMonth = new Date()
-  thisMonth.setDate(1)
-  const monthReplies = replies.filter((reply) => new Date(reply.reply_date) >= thisMonth).length
+export function StatsOverview({ replies, dashboardStats }: StatsOverviewProps) {
+  // Use dashboard stats if available, otherwise fallback to manual calculation
+  const totalReplies = dashboardStats?.total_replies ?? replies.length
+  const todayReplies = dashboardStats?.today_replies ?? (() => {
+    const today = new Date().toISOString().split("T")[0]
+    return replies.filter((reply) => reply.reply_date === today).length
+  })()
+  const weekReplies = dashboardStats?.week_replies ?? (() => {
+    const thisWeek = new Date()
+    thisWeek.setDate(thisWeek.getDate() - 7)
+    return replies.filter((reply) => new Date(reply.reply_date) >= thisWeek).length
+  })()
+  const monthReplies = dashboardStats?.month_replies ?? (() => {
+    const thisMonth = new Date()
+    thisMonth.setDate(1)
+    return replies.filter((reply) => new Date(reply.reply_date) >= thisMonth).length
+  })()
 
   const stats = [
     {

@@ -4,7 +4,6 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { ReplyChart } from "@/components/dashboard/reply-chart";
 import { TopTones } from "@/components/dashboard/top-tones";
-import { RecentActivity } from "@/components/dashboard/recent-activity";
 async function fetchRepliesFromBackend(accessToken: string) {
   try {
     const response = await fetch(
@@ -103,7 +102,10 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid gap-6">
-          <StatsOverview replies={replies || []} />
+          <StatsOverview
+            replies={replies || []}
+            dashboardStats={dashboardStats}
+          />
 
           <div className="grid lg:grid-cols-2 gap-6">
             <ReplyChart replies={replies || []} />
