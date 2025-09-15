@@ -1,13 +1,26 @@
+// Debug logging control - set to false to disable all logs
+const DEBUG_ENABLED = false;
+
+function debugLog(...args) {
+  if (DEBUG_ENABLED) {
+    console.log("[HumanReplies]", ...args);
+  }
+}
+
 let replyButton = null;
 let selectedText = "";
 let toneMenu = null;
 let availableTones = [];
-let enableEverywhere = false;
+let siteSpecificMode = false;
+let extensionMode = "selected"; // "everywhere", "selected", "disabled"
+let allowedSites = ["x.com", "twitter.com", "linkedin.com", "facebook.com"];
 let isApiOnline = false;
 let defaultTone = "ask";
+let useOwnVoice = false;
+let userWritingStyle = "";
+let improveTextEnabled = true; // Enable improve text feature by default
 let isUpdatingApiStatus = false; // Flag to prevent feedback loops
 let isExtensionContextInvalidated = false; // Flag to track invalid extension context
-
 
 // Helper function to check if extension context is still valid
 function isExtensionContextValid() {
@@ -124,7 +137,6 @@ async function safeChromeStorageSet(storageType, data) {
 
 // Graceful shutdown when extension context is invalidated
 function shutdownGracefully() {
-
   // Clear intervals and timeouts
   if (offlineStatusInterval) {
     clearInterval(offlineStatusInterval);
@@ -148,7 +160,6 @@ function shutdownGracefully() {
   // Remove event listeners
   document.removeEventListener("mouseup", handleSelection);
   document.removeEventListener("keyup", handleSelection);
-
 }
 
 // Helper function to update API status without triggering feedback loops
@@ -167,7 +178,6 @@ async function updateApiStatus(isOnline, source = "content-script") {
     await safeChromeStorageSet("local", {
       humanreplies_api_status: statusUpdate,
     });
-
 
     // Update local state
     isApiOnline = isOnline;
@@ -212,30 +222,54 @@ async function loadTonesFromStorage() {
   }
 }
 
-// Social media sites where context.js should be active
-const SOCIAL_MEDIA_SITES = [
+// Sites where context.js should be active
+const DEFAULT_ALLOWED_SITES = [
   "x.com",
   "twitter.com",
   "linkedin.com",
   "facebook.com",
 ];
 
-// Check if current site is a social media platform
-function isSocialMediaSite() {
+// Check if current site is in the allowed sites list
+function isOnAllowedSite() {
   const hostname = window.location.hostname.toLowerCase();
-  return SOCIAL_MEDIA_SITES.some((site) => hostname.includes(site));
+  return allowedSites.some((site) => hostname.includes(site));
 }
 
-// Load enable everywhere setting from localStorage
-async function loadEnableEverywhereSetting() {
+// Load site settings from storage
+async function loadSiteSettings() {
   try {
-    const result = await safeChromeStorageGet("sync", ["enableEverywhere"]);
-    enableEverywhere =
-      result.enableEverywhere !== undefined ? result.enableEverywhere : false;
-    // console.log("Enable everywhere setting:", enableEverywhere);
+    const result = await safeChromeStorageGet("sync", [
+      "siteSpecificMode",
+      "extensionMode",
+      "allowedSites",
+    ]);
+    siteSpecificMode =
+      result.siteSpecificMode !== undefined ? result.siteSpecificMode : false;
+
+    // Load extension mode with migration from old siteSpecificMode
+    if (
+      result.extensionMode &&
+      ["everywhere", "selected", "disabled"].includes(result.extensionMode)
+    ) {
+      extensionMode = result.extensionMode;
+    } else if (result.siteSpecificMode !== undefined) {
+      // Migrate from old setting
+      extensionMode = result.siteSpecificMode ? "selected" : "everywhere";
+    } else {
+      extensionMode = "everywhere";
+    }
+    if (Array.isArray(result.allowedSites)) {
+      allowedSites = result.allowedSites;
+    } else if (result.allowedSites === undefined) {
+      // Only set defaults if allowedSites has never been set
+      allowedSites = DEFAULT_ALLOWED_SITES;
+    }
+    // console.log("Site specific mode:", siteSpecificMode, "Allowed sites:", allowedSites);
   } catch (err) {
-    // console.log("Error loading enable everywhere setting:", err);
-    enableEverywhere = false;
+    // console.log("Error loading site settings:", err);
+    siteSpecificMode = false;
+    allowedSites = DEFAULT_ALLOWED_SITES;
   }
 }
 
@@ -248,6 +282,30 @@ async function loadDefaultToneSetting() {
   } catch (err) {
     // console.log("Error loading default tone setting:", err);
     defaultTone = "ask";
+  }
+}
+
+// Load user voice settings
+async function loadUserVoiceSettings() {
+  try {
+    const result = await safeChromeStorageGet("sync", [
+      "useOwnVoice",
+      "writingStyle",
+      "guardianText",
+      "improveTextEnabled",
+    ]);
+    useOwnVoice = result.useOwnVoice !== undefined ? result.useOwnVoice : false;
+    userWritingStyle = result.writingStyle || "";
+    improveTextEnabled =
+      result.improveTextEnabled !== undefined
+        ? result.improveTextEnabled
+        : true;
+    // console.log("User voice settings:", { useOwnVoice, userWritingStyle, improveTextEnabled });
+  } catch (err) {
+    // console.log("Error loading user voice settings:", err);
+    useOwnVoice = false;
+    userWritingStyle = "";
+    improveTextEnabled = true;
   }
 }
 
@@ -307,29 +365,42 @@ async function loadApiStatus() {
 
 // Check if context.js should be active on current site
 function shouldBeActive() {
+  debugLog("shouldBeActive check:", {
+    isApiOnline,
+    extensionMode,
+    hostname: window.location.hostname,
+    allowedSites,
+  });
+
   // First check if API is online
   if (!isApiOnline) {
-    // console.log("Context.js disabled - API is offline");
+    debugLog("Context.js disabled - API is offline");
     return false;
   }
 
-  // Check if we should enable everywhere or restrict to social media
-  if (enableEverywhere) {
-    return true; // Active on all sites when enable everywhere is ON
+  // Check extension mode
+  switch (extensionMode) {
+    case "disabled":
+      debugLog("Extension is disabled everywhere");
+      return false;
+    case "selected":
+      const onAllowed = isOnAllowedSite();
+      debugLog("Extension in selected mode, on allowed site:", onAllowed);
+      return onAllowed;
+    case "everywhere":
+    default:
+      debugLog("Extension in everywhere mode");
+      return true;
   }
-
-  // Default behavior: only active on social media sites
-  const isOnSocialMedia = isSocialMediaSite();
-  // console.log("Checking if should be active - enableEverywhere:", enableEverywhere, "isOnSocialMedia:", isOnSocialMedia, "isApiOnline:", isApiOnline);
-  return isOnSocialMedia;
 }
 
 // Initialize settings and tones on script load
 async function initialize() {
-  await loadEnableEverywhereSetting();
+  await loadSiteSettings();
   await loadApiStatus();
   await loadTonesFromStorage();
   await loadDefaultToneSetting();
+  await loadUserVoiceSettings();
 
   if (!shouldBeActive()) {
     // console.log("Context.js disabled - API offline or restricted to social media");
@@ -444,14 +515,15 @@ function createToneMenu(buttonElement) {
   }, 100);
 }
 
-function createReplyButton() {
+function createReplyButton(isImproveMode = false) {
   // console.log("Creating reply button");
   const button = document.createElement("div");
   button.id = "humanreplies-reply-button";
-  button.innerHTML = "💬 Generate Reply";
+  button.innerHTML = isImproveMode ? "✨ Improve text" : "💬 Generate Reply";
+  button.dataset.improveMode = isImproveMode.toString();
   button.style.cssText = `
     position: absolute;
-    background: linear-gradient(45deg, #f6f1e8, #c4b8a5);
+    background: #f6f1e8;
     color: #000;
     padding: 8px 12px;
     border-radius: 6px;
@@ -461,7 +533,7 @@ function createReplyButton() {
     cursor: pointer;
     z-index: 10000;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    border: 1px solid #000;
+    border: 1px solid #b1b1b1;
     user-select: none;
     display: none;
     white-space: nowrap;
@@ -491,17 +563,23 @@ function createReplyButton() {
     document.head.appendChild(style);
   }
 
-  // Set arrow visibility based on default tone
-  if (defaultTone === "ask") {
+  // Set arrow visibility based on default tone (only for generate mode, not improve mode)
+  if (defaultTone === "ask" && !isImproveMode) {
     button.classList.add("show-arrow");
   }
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    // console.log("Reply button clicked, default tone:", defaultTone);
+    // console.log("Reply button clicked, default tone:", defaultTone, "improve mode:", isImproveMode);
 
-    // If a preset tone is set (not "ask"), generate reply directly
+    // For improve mode, always use the default tone directly (no menu)
+    if (isImproveMode) {
+      handleReplyGeneration(defaultTone || "helpful");
+      return;
+    }
+
+    // For generate mode, follow normal logic
     if (defaultTone && defaultTone !== "ask") {
       handleReplyGeneration(defaultTone);
     } else {
@@ -514,11 +592,20 @@ function createReplyButton() {
   return button;
 }
 
-function showReplyButton(selection) {
+function showReplyButton(selection, isImproveMode = false) {
   // console.log("showReplyButton called with selection:", selection.toString());
 
+  // Remove existing button if mode has changed
+  if (
+    replyButton &&
+    replyButton.dataset.improveMode !== isImproveMode.toString()
+  ) {
+    replyButton.remove();
+    replyButton = null;
+  }
+
   if (!replyButton) {
-    replyButton = createReplyButton();
+    replyButton = createReplyButton(isImproveMode);
   }
 
   const range = selection.getRangeAt(0);
@@ -569,12 +656,19 @@ function showLoadingBox() {
   // Remove any existing boxes
   hideAllBoxes();
 
+  // Determine if we're in improve mode
+  const isImproveMode =
+    replyButton && replyButton.dataset.improveMode === "true";
+  const loadingMessage = isImproveMode
+    ? "Improving your text..."
+    : "Generating reply suggestions...";
+
   loadingBox = document.createElement("div");
   loadingBox.id = "humanreplies-loading-box";
   loadingBox.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <span>Generating reply suggestions...</span>
+      <span>${loadingMessage}</span>
     </div>
   `;
   loadingBox.style.cssText = `
@@ -605,7 +699,7 @@ function showLoadingBox() {
         --border-radius: 8px;
       }
       
-      .chunky-button {
+      .chunky-button-423412 {
         display: inline-block;
         border: 4px solid var(--color-black);
         background: var(--color-orange);
@@ -622,8 +716,8 @@ function showLoadingBox() {
         outline: none;
         position: relative;
       }
-      .chunky-button:hover,
-      .chunky-button:focus-visible {
+      .chunky-button-423412:hover,
+      .chunky-button-423412:focus-visible {
         transform: translate(3px, 3px);
         box-shadow: 0px 0px 0px var(--color-black);
       }
@@ -647,6 +741,19 @@ function hideLoadingBox() {
 }
 
 function showSuccessBox(variations, remainingReplies) {
+  debugLog("showSuccessBox called with:", {
+    variations,
+    remainingReplies,
+    variationsLength: variations?.length,
+  });
+
+  // Check for null variations
+  if (!variations) {
+    debugLog("ERROR: variations is null/undefined!");
+    showErrorBox("Failed to generate reply - no response received");
+    return;
+  }
+
   // Remove any existing boxes
   hideAllBoxes();
 
@@ -663,7 +770,7 @@ function showSuccessBox(variations, remainingReplies) {
 
   successBox.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <span style="font-weight: 600; color: #000000;">Reply Suggestions</span>
+      <span style="font-weight: 600; color: #000000;" id="humanreplies-header-text">Reply Suggestions</span>
       <button id="humanreplies-close-btn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
     </div>
     ${
@@ -722,7 +829,7 @@ function showSuccessBox(variations, remainingReplies) {
     remainingReplies ? ` • ${remainingReplies} replies left` : ""
   }
       </span>
-      <button id="humanreplies-copy-btn" class="chunky-button" style="
+      <button id="humanreplies-copy-btn" class="chunky-button-423412" style="
         display: flex;
         align-items: center;
         gap: 4px;
@@ -753,6 +860,15 @@ function showSuccessBox(variations, remainingReplies) {
 
   document.body.appendChild(successBox);
 
+  // Update header text based on improve mode
+  const isImproveMode =
+    replyButton && replyButton.dataset.improveMode === "true";
+  const headerText = isImproveMode ? "Improved Text" : "Reply Suggestions";
+  const headerElement = successBox.querySelector("#humanreplies-header-text");
+  if (headerElement) {
+    headerElement.textContent = headerText;
+  }
+
   // Hide reply button when hovering over success box
   successBox.addEventListener("mouseenter", () => {
     hideReplyButton();
@@ -766,16 +882,8 @@ function showSuccessBox(variations, remainingReplies) {
   const nextBtn = successBox.querySelector("#humanreplies-next-btn");
   const charCount = successBox.querySelector("#humanreplies-char-count");
 
-  // Hide reply button when selecting text inside textarea
-  textarea.addEventListener("mouseup", () => {
-    hideReplyButton();
-  });
-  textarea.addEventListener("keyup", () => {
-    hideReplyButton();
-  });
-  textarea.addEventListener("select", () => {
-    hideReplyButton();
-  });
+  // Note: Removed textarea event listeners that were hiding the reply button
+  // This allows the improve functionality to work properly with textareas
 
   closeBtn.addEventListener("click", () => {
     hideSuccessBox();
@@ -938,8 +1046,88 @@ function hideAllBoxes() {
   hideErrorBox();
 }
 
+// Check if selection is inside an input field or contenteditable element
+function isSelectionInEditableArea() {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return { inEditable: false, isTextarea: false };
+
+  const range = selection.getRangeAt(0);
+  let element = range.commonAncestorContainer;
+
+  // If it's a text node, get the parent element
+  if (element.nodeType === Node.TEXT_NODE) {
+    element = element.parentElement;
+  }
+
+  // Check current element and up to 5 levels of parents (increased for X/Twitter's nested structure)
+  for (let i = 0; i < 6 && element; i++) {
+    debugLog(`Checking element level ${i}:`, {
+      tagName: element.tagName,
+      contentEditable: element.contentEditable,
+      className: element.className,
+      dataOffsetKey: element.getAttribute("data-offset-key"),
+      nodeType: element.nodeType,
+    });
+
+    // Check if it's a textarea FIRST (highest priority)
+    if (element.tagName === "TEXTAREA") {
+      debugLog("✅ Found textarea:", element.tagName);
+      return { inEditable: true, isTextarea: true };
+    }
+
+    // Check if it's an input field
+    if (element.tagName === "INPUT") {
+      debugLog("Found input field:", element.tagName);
+      return { inEditable: true, isTextarea: false };
+    }
+
+    // Check if element or parent has contenteditable="true" (treat as textarea for improve functionality)
+    if (
+      element.contentEditable === "true" ||
+      element.getAttribute("contenteditable") === "true"
+    ) {
+      debugLog(
+        "✅ Found contenteditable element (treating as textarea):",
+        element
+      );
+      return { inEditable: true, isTextarea: true };
+    }
+
+    // Enhanced X/Twitter detection - check for Draft.js editor structure
+    if (
+      element.getAttribute("data-offset-key") ||
+      (element.className &&
+        element.className.includes("public-DraftStyleDefault"))
+    ) {
+      debugLog("✅ Found X/Twitter Draft.js editor element:", element);
+      return { inEditable: true, isTextarea: true };
+    }
+
+    // Additional X/Twitter patterns - check for common X editor containers
+    if (
+      element.className &&
+      (element.className.includes("DraftEditor-") ||
+        element.className.includes("notranslate") ||
+        (element.getAttribute("role") === "textbox" &&
+          element.getAttribute("aria-multiline") === "true"))
+    ) {
+      debugLog("✅ Found X/Twitter editor container:", element);
+      return { inEditable: true, isTextarea: true };
+    }
+
+    // Move up to parent element
+    element = element.parentElement;
+  }
+
+  return { inEditable: false, isTextarea: false };
+}
+
 async function handleReplyGeneration(tone) {
-  // console.log("Generate reply for:", selectedText, "with tone:", tone);
+  debugLog("Starting reply generation for:", selectedText, "with tone:", tone);
+
+  // Determine if we're in improve mode
+  const isImproveMode =
+    replyButton && replyButton.dataset.improveMode === "true";
 
   // Hide the reply button
   hideReplyButton();
@@ -985,6 +1173,8 @@ async function handleReplyGeneration(tone) {
               options: {
                 platform: platform,
                 tone: tone || "helpful",
+                userWritingStyle: useOwnVoice ? userWritingStyle : null,
+                isImproveMode: isImproveMode,
               },
             },
             (response) => {
@@ -1007,6 +1197,7 @@ async function handleReplyGeneration(tone) {
     ]);
 
     hideLoadingBox();
+    debugLog("Background script response:", response);
 
     if (response && response.success) {
       // Enforce character limit based on platform
@@ -1020,9 +1211,36 @@ async function handleReplyGeneration(tone) {
 
       // Handle variations or single reply
       let variations = response.variations;
-      if (!variations || !Array.isArray(variations)) {
-        // Fallback to single reply
-        variations = [response.reply];
+      debugLog(
+        "Raw variations from response:",
+        variations,
+        "reply:",
+        response.reply
+      );
+
+      // Validate that variations are strings, not JSON objects
+      const isValidVariation = (v) => {
+        if (typeof v !== "string") return false;
+        try {
+          // Check if it's a JSON object string
+          const parsed = JSON.parse(v);
+          return typeof parsed === "string"; // Only allow if it parses to a string
+        } catch {
+          return true; // Not JSON, so it's a regular string
+        }
+      };
+
+      if (
+        !variations ||
+        !Array.isArray(variations) ||
+        !variations.every(isValidVariation)
+      ) {
+        // Fallback to single reply, but validate it too
+        const validReply = isValidVariation(response.reply)
+          ? response.reply
+          : "I'd be happy to help with that.";
+        variations = [validReply];
+        debugLog("Using fallback single reply:", variations);
       }
 
       // Enforce character limits on all variations
@@ -1030,10 +1248,17 @@ async function handleReplyGeneration(tone) {
         enforceCharacterLimit(reply, maxLength)
       );
 
-      // console.log(`Generated ${processedVariations.length} variations`);
+      debugLog(
+        `Generated ${processedVariations.length} variations:`,
+        processedVariations
+      );
       showSuccessBox(processedVariations, response.remainingReplies);
     } else {
       const errorMessage = response?.error || "Unknown error occurred";
+      debugLog("Reply generation failed - response not successful:", {
+        response,
+        errorMessage,
+      });
       console.error("Reply generation failed:", errorMessage);
 
       // Trigger connectivity check when reply generation fails
@@ -1106,17 +1331,43 @@ function handleSelection() {
     return;
   }
 
-  // console.log("handleSelection triggered");
+  debugLog("handleSelection triggered");
   const selection = window.getSelection();
 
-  // console.log("Selection details:", { rangeCount: selection.rangeCount, text: selection.toString(), textLength: selection.toString().trim().length });
+  debugLog("Selection details:", {
+    rangeCount: selection.rangeCount,
+    text: selection.toString(),
+    textLength: selection.toString().trim().length,
+  });
 
   if (selection.rangeCount > 0 && selection.toString().trim().length > 0) {
     selectedText = selection.toString().trim();
-    // console.log("Text selected, showing button for:", selectedText);
-    showReplyButton(selection);
+
+    // Check if selection is inside an editable area
+    const editableInfo = isSelectionInEditableArea();
+
+    if (editableInfo.inEditable) {
+      if (editableInfo.isTextarea && improveTextEnabled) {
+        debugLog("Selection is in textarea, showing improve button");
+        showReplyButton(selection, true); // true = improve mode
+      } else if (editableInfo.isTextarea && !improveTextEnabled) {
+        debugLog(
+          "Selection is in textarea, but improve text feature is disabled, hiding button"
+        );
+        hideReplyButton();
+      } else {
+        debugLog(
+          "Selection is in input/contenteditable (not textarea), hiding reply button"
+        );
+        hideReplyButton();
+      }
+      return;
+    }
+
+    debugLog("Text selected, showing generate button for:", selectedText);
+    showReplyButton(selection, false); // false = generate mode
   } else {
-    // console.log("No text selected, hiding button");
+    debugLog("No text selected, hiding button");
     hideReplyButton();
   }
 }
@@ -1187,9 +1438,14 @@ if (isChromeApiAvailable()) {
         }
       }
 
-      if (namespace === "sync" && changes.enableEverywhere) {
-        // console.log("Enable everywhere setting changed, reloading");
-        loadEnableEverywhereSetting().then(() => {
+      if (
+        namespace === "sync" &&
+        (changes.siteSpecificMode ||
+          changes.extensionMode ||
+          changes.allowedSites)
+      ) {
+        // console.log("Site settings changed, reloading");
+        loadSiteSettings().then(() => {
           // Hide reply button if setting changed and we're now on a restricted site
           if (!shouldBeActive()) {
             hideReplyButton();
@@ -1213,6 +1469,17 @@ if (isChromeApiAvailable()) {
             }
           }
         });
+      }
+
+      if (
+        namespace === "sync" &&
+        (changes.useOwnVoice ||
+          changes.writingStyle ||
+          changes.guardianText ||
+          changes.improveTextEnabled)
+      ) {
+        // console.log("User voice settings changed, reloading");
+        loadUserVoiceSettings();
       }
     });
   } catch (error) {

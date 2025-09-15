@@ -24,28 +24,10 @@ DEFAULT_TONES = [
         "sort_order": 1
     },
     {
-        "name": "joke",
-        "display_name": "😂 Joke",
+        "name": "funny",
+        "display_name": "😂 Humour",
         "description": "Funny and light-hearted tone",
         "sort_order": 2
-    },
-    {
-        "name": "support",
-        "display_name": "❤️ Support",
-        "description": "Supportive and encouraging tone",
-        "sort_order": 3
-    },
-    {
-        "name": "idea",
-        "display_name": "💡 Idea",
-        "description": "Innovative and creative suggestions",
-        "sort_order": 4
-    },
-    {
-        "name": "question",
-        "display_name": "❓ Question",
-        "description": "Thoughtful conversation starters",
-        "sort_order": 5
     },
     {
         "name": "confident",

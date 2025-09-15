@@ -5,6 +5,13 @@
   <meta charset="utf-8" />
   <title>HumanReplies</title>
   <style>
+    :root {
+      --color-black: #000;
+      --color-orange: #ff7900;
+      --color-white: #fff;
+      --border-radius: 8px;
+    }
+
     body {
       width: 320px;
       padding: 24px;
@@ -511,6 +518,105 @@
       gap: 8px;
     }
 
+    .site-management {
+      margin-top: 12px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+
+    .site-list {
+      margin-bottom: 12px;
+    }
+
+    .site-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      font-size: 12px;
+    }
+
+    .site-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .site-name {
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .site-type {
+      font-size: 10px;
+      color: #6c757d;
+      background: #e9ecef;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+    }
+
+    .remove-site-button {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .remove-site-button:hover {
+      background: #c82333;
+    }
+
+    .add-site-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .site-input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 12px;
+      background: white;
+    }
+
+    .site-input:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
+    .add-site-button {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s ease;
+    }
+
+    .add-site-button:hover {
+      background: #218838;
+    }
+
+    .add-site-button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
     .api-offline-message {
       border: 1px solid #ffeaa7;
       border-radius: 10px;
@@ -553,13 +659,41 @@
         opacity: 1;
       }
     }
+
+    .chunky-button {
+      display: inline-block;
+      border: 4px solid var(--color-black);
+      background: var(--color-orange);
+      color: var(--color-white);
+      font-size: 14px;
+      font-weight: bold;
+      padding: 0.75em 2.5em;
+      border-radius: var(--border-radius);
+      box-shadow: 6px 6px 0px var(--color-black);
+      transition:
+        transform 0.18s cubic-bezier(.4, 2, .6, .8),
+        box-shadow 0.18s cubic-bezier(.78, .17, .27, .89);
+      cursor: pointer;
+      outline: none;
+      position: relative;
+      text-decoration: none;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .chunky-button:hover,
+    .chunky-button:focus-visible {
+      transform: translate(3px, 3px);
+      box-shadow: 0px 0px 0px var(--color-black);
+    }
   </style>
 </head>
 
 <body>
   <div class="header">
     <h1 class="title">HumanReplies</h1>
-    <p class="subtitle">Your Next Reply, Ready in Seconds</p>
+    <p class="subtitle">AI-powered replies, anywhere you need them.</p>
   </div>
 
   <!-- Debug output area -->
@@ -594,8 +728,8 @@
       </div>
 
       <div class="login-section">
-        <button class="login-button" id="loginButton">
-          🚀 Login to HumanReplies
+        <button class="chunky-button" id="loginButton">
+          Login to HumanReplies
         </button>
       </div>
 
@@ -607,16 +741,39 @@
           <select id="replyToneSelectLoggedOut" class="setting-select">
             <option value="ask">Always ask me</option>
           </select>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">Improve Text Feature</div>
+          <div class="setting-description">Show "✨ Improve text" button when selecting text in textboxes and editors</div>
+          <div class="setting-toggle-row">
+            <label class="toggle-switch" aria-label="Improve Text Feature">
+              <input type="checkbox" class="improve-text-toggle-logged-out" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-status improve-text-status-logged-out">On</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
           <div class="setting mt-20">
-            <div class="setting-label">Enable everywhere (Reload needed)</div>
-            <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com,
-              facebook.com. Enable this to work on all websites.</div>
-            <div class="setting-toggle-row">
-              <label class="toggle-switch" aria-label="Enable everywhere">
-                <input type="checkbox" class="enable-everywhere-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-status enable-everywhere-status">Off</span>
+            <div class="setting-label">Extension Control</div>
+            <div class="setting-description">Control where HumanReplies appears and works.</div>
+            <select id="extensionModeSelectLoggedOut" class="setting-select extension-mode-select">
+              <option value="everywhere">Enable everywhere</option>
+              <option value="selected">Only on selected sites </option>
+              <option value="disabled">Disable everywhere</option>
+            </select>
+
+            <div class="site-management hidden" id="siteManagementLoggedOut">
+              <div class="site-list" id="siteListLoggedOut">
+                <!-- Site list will be populated here -->
+              </div>
+              <div class="add-site-form">
+                <input type="text" id="newSiteInputLoggedOut" placeholder="example.com or https://www.example.com/page"
+                  class="site-input" />
+                <button id="addSiteButtonLoggedOut" class="add-site-button">Add Site</button>
+              </div>
             </div>
           </div>
         </div>
@@ -643,7 +800,7 @@
       </div>
 
       <div class="section dashboard">
-        <button id="dashboardButton" class="dashboard-button">
+        <button id="dashboardButton" class="chunky-button">
           Go to Dashboard
         </button>
       </div>
@@ -674,16 +831,37 @@
         </div>
 
         <div class="setting mt-20">
-          <div class="setting-label">Enable everywhere</div>
-          <div class="setting-description">By default, text selection works on x.com, twitter.com, linkedin.com,
-            facebook.com. Enable this to work on all websites.
+          <div class="setting-label">Improve Text Feature</div>
+          <div class="setting-description">
+            Show "✨ Improve text" button when selecting text in textboxes and editors
           </div>
           <div class="setting-toggle-row">
-            <label class="toggle-switch" aria-label="Enable everywhere">
-              <input type="checkbox" class="enable-everywhere-toggle" />
+            <label class="toggle-switch" aria-label="Improve Text Feature">
+              <input type="checkbox" class="improve-text-toggle" />
               <span class="toggle-slider"></span>
             </label>
-            <span class="toggle-status enable-everywhere-status">Off</span>
+            <span class="toggle-status improve-text-status">On</span>
+          </div>
+        </div>
+
+        <div class="setting mt-20">
+          <div class="setting-label">Extension Control</div>
+          <div class="setting-description">Control where HumanReplies appears and works.</div>
+          <select id="extensionModeSelectLoggedIn" class="setting-select extension-mode-select">
+            <option value="everywhere">Work everywhere - Extension works on all websites</option>
+            <option value="selected">Only on selected sites - Choose specific websites where extension works</option>
+            <option value="disabled">Disable everywhere - Turn off extension on all websites</option>
+          </select>
+
+          <div class="site-management hidden" id="siteManagementLoggedIn">
+            <div class="site-list" id="siteListLoggedIn">
+              <!-- Site list will be populated here -->
+            </div>
+            <div class="add-site-form">
+              <input type="text" id="newSiteInputLoggedIn" placeholder="example.com or https://www.example.com/page"
+                class="site-input" />
+              <button id="addSiteButtonLoggedIn" class="add-site-button">Add Site</button>
+            </div>
           </div>
         </div>
       </div>

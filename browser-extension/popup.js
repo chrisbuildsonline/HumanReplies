@@ -14,7 +14,19 @@ class PopupManager {
     this.isOnSupportedSite = null;
     this.useIntegrations = true;
     this.enableSelectReply = true;
-    this.enableEverywhere = false;
+    this.useOwnVoice = true;
+    this.improveTextEnabled = true; // Enable improve text feature by default
+    this.siteSpecificMode = false;
+    this.extensionMode = "everywhere"; // "everywhere", "selected", "disabled"
+    this.allowedSites = [
+      "x.com",
+      "twitter.com",
+      "linkedin.com",
+      "facebook.com",
+    ];
+    this.userSettings = null; // Store user's custom voice settings
+    this.writingStyle = ""; // User's custom writing style
+    this.guardianText = ""; // Instructions on what NOT to include
     this.offlineRetryInterval = null;
 
     this.initializeAsync();
@@ -105,6 +117,7 @@ class PopupManager {
           await this.loadTones();
           if (this.isLoggedIn) {
             this.loadCustomTones();
+            this.loadUserSettings();
           }
         }
       } else if (typeof window.checkConnectivity === "function") {
@@ -120,6 +133,7 @@ class PopupManager {
           await this.loadTones();
           if (this.isLoggedIn) {
             this.loadCustomTones();
+            this.loadUserSettings();
           }
         }
       } else {
@@ -135,6 +149,7 @@ class PopupManager {
           await this.loadTones();
           if (this.isLoggedIn) {
             this.loadCustomTones();
+            this.loadUserSettings();
           }
         }
       }
@@ -227,7 +242,12 @@ class PopupManager {
       }
 
       const cachedTones = await this.getCachedTones();
-      if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
+      // Always fetch from backend if logged in
+      if (
+        !this.isLoggedIn &&
+        cachedTones &&
+        !this.shouldRefreshTones(cachedTones)
+      ) {
         this.allTones = cachedTones.tones;
         return;
       }
@@ -664,17 +684,24 @@ class PopupManager {
     try {
       let tones;
 
-      if (this.allTones && this.allTones.length > 0) {
-        tones = this.allTones;
+      if (this.isLoggedIn) {
+        // Always fetch fresh tones from backend when logged in
+        tones = await this.api.getTones();
+        this.allTones = tones;
+        await this.cacheTones(tones);
       } else {
-        const cachedTones = await this.getCachedTones();
-        if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
-          tones = cachedTones.tones;
-          this.allTones = tones;
+        if (this.allTones && this.allTones.length > 0) {
+          tones = this.allTones;
         } else {
-          tones = await this.api.getTones();
-          this.allTones = tones;
-          await this.cacheTones(tones);
+          const cachedTones = await this.getCachedTones();
+          if (cachedTones && !this.shouldRefreshTones(cachedTones)) {
+            tones = cachedTones.tones;
+            this.allTones = tones;
+          } else {
+            tones = await this.api.getTones();
+            this.allTones = tones;
+            await this.cacheTones(tones);
+          }
         }
       }
 
@@ -760,16 +787,32 @@ class PopupManager {
   }
 
   async loadCustomTones() {
-    if (!this.isLoggedIn || !this.allTones) return;
+    console.log("[DEBUG] loadCustomTones called:", {
+      isLoggedIn: this.isLoggedIn,
+      allTones: this.allTones,
+      allTonesLength: this.allTones ? this.allTones.length : 0,
+    });
+
+    if (!this.isLoggedIn || !this.allTones) {
+      console.log("[DEBUG] Early return from loadCustomTones:", {
+        isLoggedIn: this.isLoggedIn,
+        hasAllTones: !!this.allTones,
+      });
+      return;
+    }
 
     const customTonesList = document.getElementById("customTonesList");
-    if (!customTonesList) return;
+    if (!customTonesList) {
+      console.log("[DEBUG] customTonesList element not found");
+      return;
+    }
 
     const customTones = this.allTones.filter((tone) => !tone.is_preset);
+    console.log("[DEBUG] Filtered custom tones:", customTones);
 
     if (customTones.length === 0) {
       customTonesList.innerHTML =
-        '<div style="font-size: 11px; color: #7f8c8d; text-align: center; padding: 8px;">No custom tones yet</div>';
+        '<div style="font-size: 11px; color: #7f8c8d; text-align: center; padding: 8px;">No custom tones yet<br><small>Create custom tones in the dashboard!</small></div>';
       return;
     }
 
@@ -797,103 +840,39 @@ class PopupManager {
       .join("");
   }
 
-  async saveCustomTone(isEdit = false, toneId = null) {
-    try {
-      const nameInput = document.getElementById("toneNameInput");
-      const displayInput = document.getElementById("toneDisplayInput");
-      const descInput = document.getElementById("toneDescInput");
-
-      if (!nameInput.value.trim() || !displayInput.value.trim()) {
-        this.showError("Name and display name are required");
-        return;
-      }
-
-      const toneData = {
-        name: nameInput.value.trim().toLowerCase(),
-        display_name: displayInput.value.trim(),
-        description: descInput.value.trim() || null,
-      };
-
-      let result;
-      if (isEdit && toneId) {
-        result = await this.api.updateCustomTone(toneId, toneData);
-      } else {
-        result = await this.api.createCustomTone(toneData);
-      }
-
-      this.showSuccess(isEdit ? "Tone updated!" : "Tone created!");
-      this.cancelToneForm();
-
-      await this.loadTones();
-      this.loadCustomTones();
-    } catch (error) {
-      console.error("Failed to save tone:", error);
-      this.showError(error.message || "Failed to save tone");
-    }
-  }
-
-  cancelToneForm() {
-    const form =
-      document.getElementById("addToneForm") ||
-      document.getElementById("editToneForm");
-    if (form) {
-      form.remove();
-    }
-    document.getElementById("addToneButton").style.display = "block";
-  }
-
-  async editCustomTone(toneId) {
-    const tone = this.allTones.find((t) => t.id === toneId);
-    if (!tone) return;
-
-    const customTonesList = document.getElementById("customTonesList");
-    if (!customTonesList) return;
-
-    const formHtml = `
-      <div class="tone-form" id="editToneForm">
-        <div class="tone-form-field">
-          <label class="tone-form-label">Tone Name (lowercase, no spaces)</label>
-          <input type="text" class="tone-form-input" id="toneNameInput" value="${
-            tone.name
-          }">
-        </div>
-        <div class="tone-form-field">
-          <label class="tone-form-label">Display Name</label>
-          <input type="text" class="tone-form-input" id="toneDisplayInput" value="${
-            tone.display_name
-          }">
-        </div>
-        <div class="tone-form-field">
-          <label class="tone-form-label">Description (optional)</label>
-          <textarea class="tone-form-textarea" id="toneDescInput">${
-            tone.description || ""
-          }</textarea>
-        </div>
-        <div class="tone-form-actions">
-          <button class="tone-form-btn save" onclick="saveEditedTone('${toneId}')">Update</button>
-          <button class="tone-form-btn cancel" onclick="cancelToneForm()">Cancel</button>
-        </div>
-      </div>
-    `;
-
-    customTonesList.insertAdjacentHTML("afterbegin", formHtml);
-    document.getElementById("addToneButton").style.display = "none";
-  }
-
-  async deleteCustomTone(toneId) {
-    if (!confirm("Are you sure you want to delete this custom tone?")) {
-      return;
-    }
+  async loadUserSettings() {
+    if (!this.isLoggedIn || !this.api) return;
 
     try {
-      await this.api.deleteCustomTone(toneId);
-      this.showSuccess("Tone deleted!");
+      const userSettings = await this.api.getUserSettings();
+      this.userSettings = userSettings;
 
-      await this.loadTones();
-      this.loadCustomTones();
+      // Extract writing style and guardian text for easy access
+      this.writingStyle = userSettings.writing_style || "";
+      this.guardianText = userSettings.guardian_text || "";
+
+      // Update useOwnVoice based on whether user has custom settings
+      this.useOwnVoice = !!(this.writingStyle || this.guardianText);
+
+      // Save to Chrome storage for content script access
+      chrome.storage.sync.set({
+        useOwnVoice: this.useOwnVoice,
+        writingStyle: this.writingStyle,
+        guardianText: this.guardianText,
+      });
+
+      // User settings are now available for use in API calls
     } catch (error) {
-      console.error("Failed to delete tone:", error);
-      this.showError(error.message || "Failed to delete tone");
+      console.error("Failed to load user settings:", error);
+      // Reset to defaults on error
+      this.writingStyle = "";
+      this.guardianText = "";
+      this.useOwnVoice = false;
+      chrome.storage.sync.set({
+        useOwnVoice: false,
+        writingStyle: "",
+        guardianText: "",
+      });
     }
   }
 
@@ -903,7 +882,11 @@ class PopupManager {
         "defaultTone",
         "useIntegrations",
         "enableSelectReply",
-        "enableEverywhere",
+        "useOwnVoice",
+        "improveTextEnabled",
+        "siteSpecificMode",
+        "extensionMode",
+        "allowedSites",
       ],
       (result) => {
         if (result.defaultTone) {
@@ -915,13 +898,39 @@ class PopupManager {
         if (typeof result.enableSelectReply === "boolean") {
           this.enableSelectReply = result.enableSelectReply;
         }
-        if (typeof result.enableEverywhere === "boolean") {
-          this.enableEverywhere = result.enableEverywhere;
+        if (typeof result.useOwnVoice === "boolean") {
+          this.useOwnVoice = result.useOwnVoice;
+        }
+        if (typeof result.improveTextEnabled === "boolean") {
+          this.improveTextEnabled = result.improveTextEnabled;
+        }
+        if (typeof result.siteSpecificMode === "boolean") {
+          this.siteSpecificMode = result.siteSpecificMode;
+        }
+        if (result.extensionMode && ["everywhere", "selected", "disabled"].includes(result.extensionMode)) {
+          this.extensionMode = result.extensionMode;
+        } else if (!result.extensionMode) {
+          // Migrate from old siteSpecificMode to new extensionMode
+          this.extensionMode = result.siteSpecificMode === true ? "selected" : "everywhere";
+        }
+        if (Array.isArray(result.allowedSites)) {
+          this.allowedSites = result.allowedSites;
+        } else if (result.allowedSites === undefined) {
+          // Only set defaults if allowedSites has never been set
+          this.allowedSites = [
+            "x.com",
+            "twitter.com",
+            "linkedin.com",
+            "facebook.com",
+          ];
         }
 
-        // Capture the initial value (only first time)
-        if (typeof this.enableEverywhereInitial === "undefined") {
-          this.enableEverywhereInitial = this.enableEverywhere;
+        // Capture the initial values (only first time)
+        if (typeof this.siteSpecificModeInitial === "undefined") {
+          this.siteSpecificModeInitial = this.siteSpecificMode;
+        }
+        if (typeof this.extensionModeInitial === "undefined") {
+          this.extensionModeInitial = this.extensionMode;
         }
 
         const loggedOutSelect = document.getElementById(
@@ -949,15 +958,30 @@ class PopupManager {
             el.textContent = this.enableSelectReply ? "On" : "Off";
           });
 
-        document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
-          el.checked = this.enableEverywhere;
+        document.querySelectorAll(".use-own-voice-toggle").forEach((el) => {
+          el.checked = this.useOwnVoice;
         });
-        document.querySelectorAll(".enable-everywhere-status").forEach((el) => {
-          el.textContent = this.enableEverywhere ? "On" : "Off";
+        document.querySelectorAll(".use-own-voice-status").forEach((el) => {
+          el.textContent = this.useOwnVoice ? "On" : "Off";
+        });
+        document.querySelectorAll(".improve-text-toggle, .improve-text-toggle-logged-out").forEach((el) => {
+          el.checked = this.improveTextEnabled;
+        });
+        document.querySelectorAll(".improve-text-status, .improve-text-status-logged-out").forEach((el) => {
+          el.textContent = this.improveTextEnabled ? "On" : "Off";
         });
 
+        // Update extension mode dropdowns
+        document.querySelectorAll(".extension-mode-select").forEach((el) => {
+          el.value = this.extensionMode;
+        });
+
+        // Update site management UI visibility
+        this.updateSiteManagementUI();
+        this.renderSiteList();
+
         // Ensure labels reflect correct suffix state on load
-        this.updateEnableEverywhereReloadNeeded(this.enableEverywhere);
+        this.updateExtensionModeReloadNeeded(this.extensionMode);
       }
     );
   }
@@ -984,16 +1008,175 @@ class PopupManager {
     });
   }
 
-  saveEnableEverywhereSetting(enabled) {
-    this.enableEverywhere = enabled;
-    chrome.storage.sync.set({ enableEverywhere: enabled });
-    document.querySelectorAll(".enable-everywhere-status").forEach((el) => {
+  saveUseOwnVoiceSetting(enabled) {
+    this.useOwnVoice = enabled;
+    chrome.storage.sync.set({
+      useOwnVoice: enabled,
+      writingStyle: enabled ? this.writingStyle : "",
+      guardianText: enabled ? this.guardianText : "",
+    });
+    document.querySelectorAll(".use-own-voice-status").forEach((el) => {
       el.textContent = enabled ? "On" : "Off";
     });
-    document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
+    document.querySelectorAll(".use-own-voice-toggle").forEach((el) => {
       if (el.checked !== enabled) el.checked = enabled;
     });
-    this.updateEnableEverywhereReloadNeeded(enabled);
+  }
+
+  saveImproveTextSetting(enabled) {
+    this.improveTextEnabled = enabled;
+    chrome.storage.sync.set({
+      improveTextEnabled: enabled,
+    });
+    document.querySelectorAll(".improve-text-status, .improve-text-status-logged-out").forEach((el) => {
+      el.textContent = enabled ? "On" : "Off";
+    });
+    document.querySelectorAll(".improve-text-toggle, .improve-text-toggle-logged-out").forEach((el) => {
+      if (el.checked !== enabled) el.checked = enabled;
+    });
+  }
+
+  saveExtensionMode(mode) {
+    this.extensionMode = mode;
+    chrome.storage.sync.set({ extensionMode: mode });
+    
+    // Update dropdowns
+    document.querySelectorAll(".extension-mode-select").forEach((el) => {
+      el.value = mode;
+    });
+    
+    this.updateSiteManagementUI();
+    this.updateExtensionModeReloadNeeded(mode);
+  }
+
+  saveSiteSpecificSetting(enabled) {
+    // Legacy method - migrate to new extension mode
+    const newMode = enabled ? "selected" : "everywhere";
+    this.saveExtensionMode(newMode);
+  }
+
+  updateSiteManagementUI() {
+    const loggedOutMgmt = document.getElementById("siteManagementLoggedOut");
+    const loggedInMgmt = document.getElementById("siteManagementLoggedIn");
+
+    const showSiteManagement = this.extensionMode === "selected";
+    
+    if (loggedOutMgmt) {
+      loggedOutMgmt.classList.toggle("hidden", !showSiteManagement);
+    }
+    if (loggedInMgmt) {
+      loggedInMgmt.classList.toggle("hidden", !showSiteManagement);
+    }
+  }
+
+  renderSiteList() {
+    const loggedOutList = document.getElementById("siteListLoggedOut");
+    const loggedInList = document.getElementById("siteListLoggedIn");
+
+    [loggedOutList, loggedInList].forEach((container) => {
+      if (!container) return;
+
+      container.innerHTML = "";
+
+      this.allowedSites.forEach((site, index) => {
+        const siteItem = document.createElement("div");
+        siteItem.className = "site-item";
+
+        const defaultSites = [
+          "x.com",
+          "twitter.com",
+          "linkedin.com",
+          "facebook.com",
+        ];
+        const isDefault = defaultSites.includes(site);
+
+        siteItem.innerHTML = `
+          <div>
+            <span class="site-name">${site}</span>
+            ${
+              isDefault
+                ? '<span class="site-type">default</span>'
+                : '<span class="site-type">custom</span>'
+            }
+          </div>
+          <button class="remove-site-button" data-site="${site}">Remove</button>
+        `;
+
+        container.appendChild(siteItem);
+      });
+    });
+
+    // Add event listeners for remove buttons
+    document.querySelectorAll(".remove-site-button").forEach((button) => {
+      button.addEventListener("click", (e) => {
+        const site = e.target.getAttribute("data-site");
+        this.removeSite(site);
+      });
+    });
+  }
+
+  addSite(domain) {
+    domain = domain.trim();
+
+    // Basic validation
+    if (!domain) return;
+
+    // Extract domain from full URL if needed
+    try {
+      // If it looks like a URL, parse it
+      if (domain.includes("://") || domain.startsWith("www.")) {
+        // Add protocol if missing
+        if (!domain.includes("://")) {
+          domain = "https://" + domain;
+        }
+        const url = new URL(domain);
+        domain = url.hostname;
+      }
+    } catch (e) {
+      // If URL parsing fails, treat as domain
+    }
+
+    // Normalize domain
+    domain = domain.toLowerCase();
+
+    // Remove www prefix if present
+    domain = domain.replace(/^www\./, "");
+
+    // Remove trailing slash
+    domain = domain.replace(/\/$/, "");
+
+    // Basic domain validation
+    if (!domain.includes(".") || domain.includes(" ")) {
+      this.showError("Please enter a valid domain (e.g., example.com)");
+      return;
+    }
+
+    // Check if already exists
+    if (this.allowedSites.includes(domain)) {
+      this.showError("Site already exists");
+      return;
+    }
+
+    // Add to list
+    this.allowedSites.push(domain);
+    chrome.storage.sync.set({ allowedSites: this.allowedSites });
+
+    this.renderSiteList();
+
+    // Clear input fields
+    const loggedOutInput = document.getElementById("newSiteInputLoggedOut");
+    const loggedInInput = document.getElementById("newSiteInputLoggedIn");
+    if (loggedOutInput) loggedOutInput.value = "";
+    if (loggedInInput) loggedInInput.value = "";
+
+    this.showSuccess(`Added ${domain} to allowed sites`);
+  }
+
+  removeSite(domain) {
+    this.allowedSites = this.allowedSites.filter((site) => site !== domain);
+    chrome.storage.sync.set({ allowedSites: this.allowedSites });
+    this.renderSiteList();
+    this.showSuccess(`Removed ${domain} from allowed sites`);
   }
 
   setupEventListeners() {
@@ -1076,11 +1259,63 @@ class PopupManager {
       });
     });
 
-    document.querySelectorAll(".enable-everywhere-toggle").forEach((el) => {
+    document.querySelectorAll(".use-own-voice-toggle").forEach((el) => {
       el.addEventListener("change", (e) => {
-        this.saveEnableEverywhereSetting(e.target.checked);
+        this.saveUseOwnVoiceSetting(e.target.checked);
       });
     });
+    // Improve text toggle event listeners
+    document.querySelectorAll(".improve-text-toggle, .improve-text-toggle-logged-out").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveImproveTextSetting(e.target.checked);
+      });
+    });
+
+    // Extension mode dropdown event listeners
+    document.querySelectorAll(".extension-mode-select").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveExtensionMode(e.target.value);
+      });
+    });
+
+    // Legacy site-specific toggle support for backward compatibility
+    document.querySelectorAll(".site-specific-toggle").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        this.saveSiteSpecificSetting(e.target.checked);
+      });
+    });
+
+    // Add site form event listeners
+    document
+      .getElementById("addSiteButtonLoggedOut")
+      ?.addEventListener("click", () => {
+        const input = document.getElementById("newSiteInputLoggedOut");
+        this.addSite(input.value);
+      });
+
+    document
+      .getElementById("addSiteButtonLoggedIn")
+      ?.addEventListener("click", () => {
+        const input = document.getElementById("newSiteInputLoggedIn");
+        this.addSite(input.value);
+      });
+
+    // Enter key support for site inputs
+    document
+      .getElementById("newSiteInputLoggedOut")
+      ?.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          this.addSite(e.target.value);
+        }
+      });
+
+    document
+      .getElementById("newSiteInputLoggedIn")
+      ?.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          this.addSite(e.target.value);
+        }
+      });
   }
 
   async handleLogin() {
@@ -1311,16 +1546,21 @@ class PopupManager {
     }
   }
 
-  updateEnableEverywhereReloadNeeded(currentValue) {
-    const changed = currentValue !== this.enableEverywhereInitial;
-    document.querySelectorAll(".enable-everywhere-toggle").forEach((toggle) => {
-      const setting = toggle.closest(".setting");
+  updateExtensionModeReloadNeeded(currentValue) {
+    const changed = currentValue !== this.extensionModeInitial;
+    document.querySelectorAll(".extension-mode-select").forEach((select) => {
+      const setting = select.closest(".setting");
       if (!setting) return;
       const labelEl = setting.querySelector(".setting-label");
       if (!labelEl) return;
-      labelEl.textContent =
-        "Enable everywhere" + (changed ? " (Reload needed)" : "");
+      labelEl.textContent = "Extension Control" + (changed ? " (Reload needed)" : "");
     });
+  }
+
+  updateSiteSpecificReloadNeeded(currentValue) {
+    // Legacy method - delegate to new method
+    const changed = currentValue !== this.siteSpecificModeInitial;
+    this.updateExtensionModeReloadNeeded(changed ? "selected" : this.extensionModeInitial);
   }
 }
 
@@ -1346,36 +1586,6 @@ function handleLogout() {
 function saveToneSetting(tone) {
   if (window.popupManager) {
     window.popupManager.saveToneSetting(tone);
-  }
-}
-
-function saveCustomTone() {
-  if (window.popupManager) {
-    window.popupManager.saveCustomTone();
-  }
-}
-
-function saveEditedTone(toneId) {
-  if (window.popupManager) {
-    window.popupManager.saveCustomTone(true, toneId);
-  }
-}
-
-function cancelToneForm() {
-  if (window.popupManager) {
-    window.popupManager.cancelToneForm();
-  }
-}
-
-function editCustomTone(toneId) {
-  if (window.popupManager) {
-    window.popupManager.editCustomTone(toneId);
-  }
-}
-
-function deleteCustomTone(toneId) {
-  if (window.popupManager) {
-    window.popupManager.deleteCustomTone(toneId);
   }
 }
 

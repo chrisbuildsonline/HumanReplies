@@ -382,3 +382,8 @@
     font-size: 13px !important;
   }
 }
+
+/* Hide site management when not in selected mode */
+.site-management.hidden {
+  display: none;
+}

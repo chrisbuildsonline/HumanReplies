@@ -99,6 +99,7 @@ class HumanRepliesAPI {
           tone: options.tone || "helpful",
           length: options.length || "medium",
           user_writing_style: options.userWritingStyle || null,
+          is_improve_mode: options.isImproveMode || false,
         }),
       });
 
@@ -139,15 +140,22 @@ class HumanRepliesAPI {
 
         const encodedPrompt = encodeURIComponent(data.generated_prompt);
         // Add a small random seed to avoid heavy caching
-        const pollinationsResponse = await fetch(
-          `${pollinationsUrl}/${encodedPrompt}?seed=${Math.random()
-            .toString(36)
-            .substring(2, 10)}`,
-          {
-            method: "GET",
-            headers: { Accept: "text/plain" },
-          }
-        );
+
+        const pollinationsResponse = await fetch(pollinationsUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/plain",
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "user",
+                content: data.generated_prompt, // send your full structured prompt here
+              },
+            ],
+          }),
+        });
 
         if (!pollinationsResponse.ok) {
           // throw new Error(
@@ -170,16 +178,27 @@ class HumanRepliesAPI {
           const parsedResponse = JSON.parse(rawReply);
           if (
             parsedResponse.variations &&
-            Array.isArray(parsedResponse.variations)
+            Array.isArray(parsedResponse.variations) &&
+            parsedResponse.variations.every(v => typeof v === 'string')
           ) {
             variations = parsedResponse.variations;
             finalReply = variations[0]; // Use first variation as default reply
+          } else if (typeof parsedResponse === 'string') {
+            // If parsed response is a string, use it
+            finalReply = parsedResponse;
           } else {
-            finalReply = rawReply; // Fallback to raw text
+            // If it's a JSON object but not in expected format, extract text or use fallback
+            finalReply = parsedResponse.text || parsedResponse.reply || "I'd be happy to help with that.";
           }
         } catch (e) {
-          // If JSON parsing fails, use raw response as single reply
-          finalReply = rawReply;
+          // If JSON parsing fails, check if rawReply looks like JSON before using it
+          if (rawReply.trim().startsWith('{') && rawReply.trim().endsWith('}')) {
+            // Looks like malformed JSON, use fallback message
+            finalReply = "I'd be happy to help with that.";
+          } else {
+            // Use raw response as single reply
+            finalReply = rawReply;
+          }
         }
 
         serviceUsed = "pollinations";
@@ -480,6 +499,165 @@ class HumanRepliesAPI {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to create custom tone:", error);
+      throw error;
+    }
+  }
+
+  async updateCustomTone(toneId, toneData) {
+    // Update a custom tone for the authenticated user
+    try {
+      if (!this.baseURL) {
+        throw new Error(
+          "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+        );
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to update custom tones");
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(toneData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `Failed to update tone: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to update custom tone:", error);
+      throw error;
+    }
+  }
+
+  async deleteCustomTone(toneId) {
+    // Delete a custom tone for the authenticated user
+    try {
+      if (!this.baseURL) {
+        throw new Error(
+          "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+        );
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to delete custom tones");
+      }
+
+      const response = await fetch(`${this.baseURL}/tones/${toneId}`, {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `Failed to delete tone: ${response.status}`
+        );
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to delete custom tone:", error);
+      throw error;
+    }
+  }
+
+  async getUserSettings() {
+    // Get user settings for the authenticated user
+    try {
+      if (!this.baseURL) {
+        throw new Error(
+          "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+        );
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to get user settings");
+      }
+
+      const response = await fetch(`${this.baseURL}/user-settings/`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // User settings don't exist yet, return defaults
+          return {
+            use_own_voice: false,
+            guardian_text: "",
+          };
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `Failed to get user settings: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to get user settings:", error);
+      throw error;
+    }
+  }
+
+  async updateUserSettings(settingsData) {
+    // Update user settings for the authenticated user
+    try {
+      if (!this.baseURL) {
+        throw new Error(
+          "API baseURL is not configured. Make sure to pass environmentConfig to constructor."
+        );
+      }
+
+      const userToken = await this.getUserToken();
+      if (!userToken) {
+        throw new Error("Authentication required to update user settings");
+      }
+
+      const response = await fetch(`${this.baseURL}/user-settings/`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify(settingsData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail ||
+            `Failed to update user settings: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to update user settings:", error);
       throw error;
     }
   }

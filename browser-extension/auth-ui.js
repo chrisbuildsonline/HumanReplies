@@ -43,7 +43,7 @@
 
   switchBtn.addEventListener("click", () => {
     if (DISABLE_SIGNUP) {
-      showMessage('Sign up is currently disabled', 'error');
+      showMessage("Sign up is currently disabled", "error");
       return;
     }
     isSignup = !isSignup;

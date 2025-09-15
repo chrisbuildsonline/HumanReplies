@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { ReplyChart } from "@/components/dashboard/reply-chart";
-import { TopServices } from "@/components/dashboard/top-services";
+import { TopTones } from "@/components/dashboard/top-tones";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 async function fetchRepliesFromBackend(accessToken: string) {
   try {
@@ -31,6 +31,32 @@ async function fetchRepliesFromBackend(accessToken: string) {
   }
 }
 
+async function fetchDashboardStats(accessToken: string) {
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_HOST}/api/v1/replies/stats`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store", // Don't cache the response
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Failed to fetch dashboard stats:", response.status);
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    return null;
+  }
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -44,10 +70,12 @@ export default async function DashboardPage() {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Fetch replies from our PostgreSQL backend
+  // Fetch replies and dashboard stats from our PostgreSQL backend
   let replies = [];
+  let dashboardStats = null;
   if (session?.access_token) {
     replies = await fetchRepliesFromBackend(session.access_token);
+    dashboardStats = await fetchDashboardStats(session.access_token);
   }
 
   const { data: profile } = await supabase
@@ -79,10 +107,8 @@ export default async function DashboardPage() {
 
           <div className="grid lg:grid-cols-2 gap-6">
             <ReplyChart replies={replies || []} />
-            <TopServices replies={replies || []} />
+            <TopTones topTones={dashboardStats?.top_tones || []} />
           </div>
-
-          <RecentActivity replies={replies || []} />
         </div>
       </main>
     </div>

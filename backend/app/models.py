@@ -77,6 +77,7 @@ class DashboardStats(BaseModel):
     month_replies: int
     daily_activity: List[Dict[str, Any]]  # [{"date": "2025-01-01", "count": 5}]
     top_services: List[Dict[str, Any]]    # [{"service": "x", "count": 10, "percentage": 50.0}]
+    top_tones: List[Dict[str, Any]]       # [{"tone": "helpful", "count": 8, "percentage": 40.0}]
 
 class RecentActivity(BaseModel):
     replies: List[ReplyResponse]  # Only contains: id, service_type, created_at (no sensitive data)
@@ -100,6 +101,8 @@ class GenerateReplyRequest(BaseModel):
     platform: str = Field(default="x", description="Social media platform")
     tone: str = Field(default="helpful", description="Tone of the reply")
     length: str = Field(default="medium", description="Length preference")
+    user_writing_style: Optional[str] = Field(None, description="User's custom writing style")
+    is_improve_mode: bool = Field(default=False, description="Whether this is improving existing text vs generating reply to text")
 
 class GenerateReplyResponse(BaseModel):
     generated_prompt: str

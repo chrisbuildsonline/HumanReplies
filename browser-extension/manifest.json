@@ -1,40 +1,12 @@
 {
   "manifest_version": 3,
   "name": "HumanReplies",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered replies, anywhere you need them.",
   "permissions": [
     "activeTab",
     "storage",
-    "tabs",
-    "scripting"
-  ],
-  "host_permissions": [
-    "https://x.com/*",
-    "https://twitter.com/*",
-    "https://www.linkedin.com/*",
-    "http://localhost:8000/*",
-    "http://localhost:8005/*",
-    "https://api.humanreplies.com/*",
-    "https://staging-api.humanreplies.com/*",
-    "https://text.pollinations.ai/*",
-    "https://app.humanreplies.com/*",
-    "https://anhcptguetscsoejzyed.supabase.co/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "config/environment.js",
-        "core/api-service.js",
-        "content-scripts/context.js"
-      ],
-      "css": [
-        "styles.css"
-      ]
-    }
+    "tabs"
   ],
   "icons": {
     "16": "avatar.png",
@@ -46,6 +18,19 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-scripts/context.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "HumanReplies"

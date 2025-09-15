@@ -15,7 +15,7 @@ class EnvironmentConfig {
         },
       },
       production: {
-        apiBaseURL: "https://api.humanreplies.com/api/v1",
+        apiBaseURL: "http://api.humanreplies.com/api/v1",
         dashboardURL: "https://humanreplies.com/dashboard",
         debug: false,
         supabase: {
@@ -27,7 +27,7 @@ class EnvironmentConfig {
     };
 
     // Default environment - change this for different builds
-    this.currentEnvironment = "production";
+    this.currentEnvironment = "development";
 
     // Load persisted environment (local storage) – no auto production fallback
     this.loadEnvironment();
@@ -53,10 +53,6 @@ class EnvironmentConfig {
         error
       );
     }
-    console.log(
-      "[EnvironmentConfig] Active environment:",
-      this.currentEnvironment
-    );
   }
 
   detectEnvironment() {
@@ -98,7 +94,6 @@ class EnvironmentConfig {
             chrome.storage.local.set({ environment: env }, resolve);
           });
         }
-        console.log("[EnvironmentConfig] Environment explicitly set to", env);
       } catch (error) {
         console.warn("Could not save environment to storage:", error);
       }

@@ -280,26 +280,60 @@ async def generate_reply(
         
         # Get user if authenticated
         user = None
+        user_settings = None
         if current_user:
             user = await get_or_create_user(db, current_user)
+            # Get user settings if they exist
+            from app.models import UserSettings
+            result = await db.execute(
+                select(UserSettings).where(UserSettings.user_id == user.id)
+            )
+            user_settings = result.scalar_one_or_none()
         
-        # Determine tone type
-        tone_type = await determine_tone_type(
-            db, 
-            request.tone, 
-            str(user.id) if user else None
+        # Try to fetch preset tone first
+        tone_obj = None
+        tone_type = "unknown"
+        result = await db.execute(
+            select(Tone).where(and_(Tone.name == request.tone, Tone.is_preset == True))
         )
-        
-        # Build prompt but don't generate response (client will do that)
+        preset_tone = result.scalar_one_or_none()
+        if preset_tone:
+            tone_obj = preset_tone
+            tone_type = request.tone
+        elif user:
+            try:
+                user_uuid = user.id if not isinstance(user.id, str) else uuid.UUID(user.id)
+                result = await db.execute(
+                    select(Tone).where(and_(
+                        Tone.name == request.tone,
+                        Tone.is_preset == False,
+                        Tone.user_id == user_uuid
+                    ))
+                )
+                custom_tone = result.scalar_one_or_none()
+                if custom_tone:
+                    tone_obj = custom_tone
+                    tone_type = "custom"
+            except Exception:
+                pass
+
+        # If no matching tone, fallback to no tone
         prompt = build_prompt(request.context, {
-            "tone": request.tone,
+            "tone_obj": tone_obj,
             "platform": request.platform,
-            "length": request.length
+            "length": request.length,
+            "user_writing_style": request.user_writing_style,
+            "user_settings": user_settings,
+            "is_improve_mode": request.is_improve_mode
         })
-        
+
+        # Output prompt for debugging
+        logger.info(f"Generated prompt: {prompt}")
+        print(f"Generated prompt: {prompt}")
+
         # Log reply usage for analytics
         await log_reply_usage(db, request.platform, tone_type, user)
-        
+
         # Return just the prompt, let client handle the actual generation
         return GenerateReplyResponse(
             generated_prompt=prompt,
@@ -307,7 +341,7 @@ async def generate_reply(
             remaining_replies=None,  # Unlimited for now
             is_limit_reached=False,
             service_used="pollinations"
-            )
+        )
         
     except HTTPException:
         raise
@@ -319,66 +353,99 @@ async def generate_reply(
         )
 
 def build_prompt(context: str, options: Dict[str, Any]) -> str:
-    """Build prompt for AI service - same logic as extension"""
-    tone = options.get("tone", "helpful")
+    """Build prompt for AI service - handles both reply generation and text improvement"""
+    tone_obj = options.get("tone_obj")
     platform = options.get("platform", "social media")
     length = options.get("length", "medium")
-    
+    user_writing_style = options.get("user_writing_style")
+    user_settings = options.get("user_settings")
+    is_improve_mode = options.get("is_improve_mode", False)
+
     p = str(platform).lower()
     is_twitter = p == "twitter" or p == "x"
-    
-    # Length-based character limits
-    length_instructions = {
-        "short": "Keep it very brief, under 50 characters.",
-        "medium": "Limit to under 100 characters." if is_twitter else "Keep it moderately concise, under 200 characters.",
-        "long": "You can be more detailed, up to 280 characters." if is_twitter else "Feel free to be more comprehensive, up to 500 characters."
-    }
-    
-    platform_instructions = (
-        f"{length_instructions.get(length, length_instructions['medium'])} Keep it very light and short, do not sound to stiff. "
-        "Avoid hashtags and unnecessary @mentions. Use newlines \\r\\n if suitable. "
-        if is_twitter else f"{length_instructions.get(length, length_instructions['medium'])} Keep it concise and skimmable."
-    )
-    
-    tone_instruction = "Write a helpful, balanced reply. "
-    if tone == "joke":
-        tone_instruction = "Write a funny, good-natured reply."
-    elif tone == "support":
-        tone_instruction = "Write a supportive, encouraging reply. You don't have to write keep going in every response."
-    elif tone == "idea":
-        tone_instruction = "Suggest an innovative, practical idea as a reply."
-    elif tone == "confident":
-        tone_instruction = "Write a confident, assertive reply."
-    elif tone == "question":
-        tone_instruction = "Ask a thoughtful, conversation-starting question as a reply."
-    
-    tone_instruction += (
-        " You are replying to a human, so act like it. Use smileys only if appropriate. "
-        "Build on the original post. Answer questions if asked."
-    )
-    
+
+    # Length-based character limits - different for improve vs reply mode
+    if is_improve_mode:
+        length_instructions = {
+            "short": "Keep the improved version concise and focused.",
+            "medium": "Enhance the text while maintaining reasonable length.",
+            "long": "Feel free to expand and add detail while improving clarity and impact."
+        }
+    else:
+        length_instructions = {
+            "short": "Keep it very brief, under 50 characters.",
+            "medium": "Limit to under 100 characters." if is_twitter else "Keep it moderately concise, under 200 characters.",
+            "long": "You can be more detailed, up to 280 characters." if is_twitter else "Feel free to be more comprehensive, up to 500 characters."
+        }
+
+    platform_instructions = length_instructions.get(length, length_instructions['medium'])
+
+    # Use tone_obj's instruction/description if available
+    if tone_obj and hasattr(tone_obj, "instruction") and tone_obj.instruction:
+        tone_instruction = tone_obj.instruction
+    elif tone_obj and hasattr(tone_obj, "description") and tone_obj.description:
+        tone_instruction = tone_obj.description
+    else:
+        # Default instruction based on mode
+        if is_improve_mode:
+            tone_instruction = ""  # No default needed for improve mode
+        else:
+            tone_instruction = "Reply"  # Default for reply mode
+
+    # Add user's custom writing style if provided
+    custom_writing_instructions = ""
+    if user_settings and hasattr(user_settings, "writing_style") and user_settings.writing_style:
+        custom_writing_instructions = f"Important: Follow this custom writing style: {user_settings.writing_style}. "
+    elif user_writing_style:
+        custom_writing_instructions = f"Important: Follow this custom writing style: {user_writing_style}. "
+
+    # Add guardian text (what NOT to do) if provided
+    guardian_instructions = ""
+    if user_settings and hasattr(user_settings, "guardian_text") and user_settings.guardian_text:
+        guardian_instructions = f"IMPORTANT - Do NOT: {user_settings.guardian_text}. "
+
+    # No dash rule
     no_dash_rule = (
         "Do not use em dashes (—) or en dashes (–). Use commas, periods, or semicolons instead. "
-        "Grammar should be easy to read, for everyone. "
         "Before returning, scan the text and replace any em/en dash with a comma or period."
     )
-    
-    # Request 3 variations in JSON format
-    variation_instruction = (
-        "Generate exactly 3 different variations of the reply. "
-        "Return them as a JSON object with this exact format: "
-        "{\"variations\": [\"variation1\", \"variation2\", \"variation3\"]}. "
-        "Each variation should be unique and follow all the rules above. "
-        "Do not include any other text outside the JSON response."
-    )
-    
+
+    # Request 3 variations in JSON format - different wording for improve vs reply mode
+    if is_improve_mode:
+        variation_instruction = (
+            "Generate exactly 3 different improved versions of the text. "
+            "Return them as a JSON object with this exact format: "
+            "{\"variations\": [\"variation1\", \"variation2\", \"variation3\"]}. "
+            "Each variation should be a unique improvement and follow all the rules above. "
+            "Do not include any other text outside the JSON response."
+        )
+    else:
+        variation_instruction = (
+            "Generate exactly 3 different variations of the reply. "
+            "Return them as a JSON object with this exact format: "
+            "{\"variations\": [\"variation1\", \"variation2\", \"variation3\"]}. "
+            "Each variation should be unique and follow all the rules above. "
+            "Do not include any other text outside the JSON response."
+        )
+
+    # Different prompt structure for improve mode vs reply mode
+    if is_improve_mode:
+        # For improve mode: focus on enhancing existing text
+        main_instruction = f"Improve this text to make it more {tone_instruction.lower() if tone_instruction else 'polished and professional'}: \"{context}\"."
+        fallback_message = "If you can't improve the text, return: {\"variations\": [\"error\", \"error\", \"error\"]}"
+    else:
+        # For reply mode: generate response to content
+        main_instruction = f"{tone_instruction} to this {('X (Twitter)' if is_twitter else p)} post: \"{context}\"."
+        fallback_message = "If you can't generate valid replies, return: {\"variations\": [\"error\", \"error\", \"error\"]}"
+
     prompt_parts = [
-        f"{tone_instruction} to this {('X (Twitter)' if is_twitter else p)} post: \"{context}\".",
-        f"{platform_instructions} Keep it conversational and human-like.",
-        "Be respectful. No emojis unless present in the original.",
+        main_instruction,
+        custom_writing_instructions,
+        guardian_instructions,
+        f"{platform_instructions}",
         no_dash_rule,
         variation_instruction,
-        "If you can't generate valid replies, return: {\"variations\": [\"error\", \"error\", \"error\"]}"
+        fallback_message
     ]
-    
+
     return "\n".join(filter(None, prompt_parts)).strip()

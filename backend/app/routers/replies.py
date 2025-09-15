@@ -207,13 +207,32 @@ async def get_dashboard_stats(
                 "percentage": round(percentage, 1)
             })
         
+        # Top tones
+        tones_result = await db.execute(
+            select(Reply.tone_type, func.count(Reply.id).label('count'))
+            .where(and_(Reply.user_id == user.id, Reply.tone_type.isnot(None)))
+            .group_by(Reply.tone_type)
+            .order_by(desc('count'))
+            .limit(5)
+        )
+        
+        top_tones = []
+        for tone, count in tones_result:
+            percentage = (count / total_replies * 100) if total_replies > 0 else 0
+            top_tones.append({
+                "tone": tone,
+                "count": count,
+                "percentage": round(percentage, 1)
+            })
+        
         return DashboardStats(
             total_replies=total_replies,
             today_replies=today_replies,
             week_replies=week_replies,
             month_replies=month_replies,
             daily_activity=daily_activity,
-            top_services=top_services
+            top_services=top_services,
+            top_tones=top_tones
         )
         
     except Exception as e:
