@@ -69,10 +69,16 @@ npm run dev   # http://localhost:3000
 
 - Purpose: One‑click, context‑aware replies on X, LinkedIn, Facebook (or anywhere you enable it).
 - Highlights: Preset + custom tones, offline‑aware UI with auto‑retry, selection‑based floating action.
-- Backend: Uses `browser-extension/config/environment.js` (dev points to `http://localhost:8000/api/v1`).
-- Load: Chrome → `chrome://extensions` → Developer Mode → Load unpacked → `browser-extension/`.
-- Flow: Select text → click “Generate Reply” → pick tone → copy one of 3 variations.
-- Auth: Supabase login in popup; token used transparently for tone and analytics APIs.
+- Backend: Uses `browser-extension/config/environment.js` (defaults to production: `http://api.humanreplies.com/api/v1`).
+- Build: `cd browser-extension && npm run build:production` (creates minified dist/ and ZIP file).
+- Load: Chrome → `chrome://extensions` → Developer Mode → Load unpacked → `browser-extension/dist/`.
+- Flow: Select text → click "Generate Reply" or "Improve text" → pick tone → copy one of 3 variations.- Auth: Supabase login in popup; token used transparently for tone and analytics APIs.
+
+### Environment Configuration
+The extension defaults to **production** environment (`http://api.humanreplies.com/api/v1`). For development:
+- Change `currentEnvironment` in `config/environment.js` to `"development"`
+- Rebuild with `npm run build:production`
+- Development uses `http://localhost:8000/api/v1`
 
 ## Dashboard
 

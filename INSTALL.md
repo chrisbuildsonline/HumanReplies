@@ -5,14 +5,18 @@ AI-powered reply generation for social media platforms with full-stack setup.
 ## 🚀 Quick Start Options
 
 ### Option 1: Extension Only (Basic Usage)
+
 For trying out the browser extension with basic features:
+
 1. Jump to [Extension Installation](#-browser-extension-installation)
 2. Skip backend setup - extension works with hosted API
 
 ### Option 2: Complete Development Setup
+
 For full development environment with local backend:
+
 1. [Backend Setup](#-backend-setup) (Required first)
-2. [Extension Installation](#-browser-extension-installation) 
+2. [Extension Installation](#-browser-extension-installation)
 3. [Dashboard Setup](#-dashboard-setup) (Optional)
 
 ---
@@ -24,7 +28,7 @@ For full development environment with local backend:
 ### Prerequisites
 
 - **Python 3.9+** with pip
-- **PostgreSQL 14+** (install [Postgres.app](https://postgresapp.com/) or PostgreSQL server)
+- **PostgreSQL 14+** (install via Homebrew: `brew install postgresql@14`)
 - **Supabase Account** (free tier works)
 
 ### Quick Setup Script
@@ -35,11 +39,12 @@ cd backend
 # macOS/Linux - Automated setup
 ./setup.sh
 
-# Windows - Automated setup  
+# Windows - Automated setup
 setup.bat
 ```
 
 The script will:
+
 - Create virtual environment
 - Install dependencies
 - Setup PostgreSQL database
@@ -64,11 +69,25 @@ pip install -r requirements.txt
 # 3. Environment configuration
 cp .env.example .env
 # Edit .env with your database and Supabase credentials
+# No setup needed for supabase except enabling Authentication (Email) with sign up link
+
+# 3.5 Setup PostgreSQL (macOS with Homebrew)
+brew install postgresql@14
+brew services start postgresql@14
+export PATH="/usr/local/opt/postgresql@14/bin:$PATH"
+createdb humanreplies
 
 # 4. Database setup
 python setup_db_complete.py    # Fresh setup with all tables and data
-# OR
-python run_migrations.py       # Apply migrations to existing database
+
+# 4.5 Setup Alembic migrations (if needed)
+mkdir -p alembic/versions
+alembic upgrade head
+alembic stamp head
+
+# 4.6 Create schema_migrations table for verification
+psql -d humanreplies -c "CREATE TABLE IF NOT EXISTS schema_migrations (id SERIAL PRIMARY KEY, migration_name VARCHAR(255) NOT NULL, applied_at TIMESTAMP DEFAULT NOW());"
+psql -d humanreplies -c "INSERT INTO schema_migrations (migration_name) VALUES ('initial_setup_complete');"
 
 # 5. Verify setup
 python verify_setup.py
@@ -111,6 +130,7 @@ REDIS_ENABLED=true
 ### Database Features
 
 ✅ **Complete Database Schema**:
+
 - Users with Supabase authentication
 - Reply analytics (privacy-first - no content stored)
 - Custom user tones and system presets
@@ -119,6 +139,7 @@ REDIS_ENABLED=true
 - Migration system with rollback support
 
 ✅ **API Endpoints Ready**:
+
 - `/api/v1/auth/*` - Authentication management
 - `/api/v1/tones/*` - Tone management (presets + custom)
 - `/api/v1/user-settings/*` - User preferences
@@ -145,13 +166,16 @@ open http://localhost:8000/docs
 ### Chrome Installation
 
 1. **Open Chrome Extensions**
+
    - Navigate to `chrome://extensions/`
    - Or Menu → More tools → Extensions
 
 2. **Enable Developer Mode**
+
    - Toggle "Developer mode" in top right
 
 3. **Load Extension**
+
    - Click "Load unpacked"
    - Select the `browser-extension` folder
    - Extension appears in your extensions list
@@ -172,14 +196,16 @@ open http://localhost:8000/docs
 ### Testing the Extension
 
 #### Method 1: Social Media Testing
+
 1. Visit https://x.com or https://twitter.com
 2. Find any tweet and click "Reply"
 3. Look for "🧠 Generate Reply" button
 4. Select tone and click to generate
 
 #### Method 2: Authentication Testing
+
 1. Click extension icon in toolbar
-2. Test "🚀 Login to HumanReplies" 
+2. Test "🚀 Login to HumanReplies"
 3. Try "✨ Create Account" flow
 4. Verify authenticated state
 
@@ -188,6 +214,7 @@ open http://localhost:8000/docs
 **Settings Access**: Right-click extension → Options
 
 **Environment Switching**:
+
 - Development: `http://localhost:8000`
 - Staging: Your staging API URL
 - Production: Your production API URL
@@ -214,7 +241,7 @@ cd dashboard
 npm install
 # OR
 pnpm install
-# OR  
+# OR
 yarn install
 
 # Setup environment
@@ -280,10 +307,11 @@ python verify_setup.py
 ```
 
 Expected output:
+
 ```
 ✅ Tables: 7
    - users: X rows
-   - user_settings: X rows  
+   - user_settings: X rows
    - replies: X rows (analytics only)
    - tones: 6+ rows (presets + custom)
    - external_service_urls: 1+ rows
@@ -301,11 +329,13 @@ Expected output:
 ### Making Changes
 
 **Extension Development**:
+
 1. Edit files in `browser-extension/`
 2. Click refresh icon in `chrome://extensions/`
 3. Test changes on social platforms
 
 **Backend Development**:
+
 ```bash
 cd backend
 source .venv/bin/activate
@@ -319,6 +349,7 @@ alembic upgrade head
 ```
 
 **Dashboard Development**:
+
 ```bash
 cd dashboard
 npm run dev  # Hot reload enabled
@@ -353,16 +384,21 @@ HumanReplies/
 ### Backend Issues
 
 **Database Connection Failed**:
+
 ```bash
 # Check PostgreSQL is running
-brew services start postgresql  # macOS
-sudo service postgresql start   # Linux
+brew services start postgresql@14  # macOS (Homebrew)
+sudo service postgresql start      # Linux
+
+# macOS: Add PostgreSQL to PATH
+export PATH="/usr/local/opt/postgresql@14/bin:$PATH"
 
 # Verify database exists
-psql -U postgres -l
+psql -d humanreplies -c "\l"
 ```
 
 **Migration Errors**:
+
 ```bash
 # Reset migrations (caution: data loss)
 python setup_db_complete.py
@@ -372,6 +408,7 @@ alembic upgrade head
 ```
 
 **Import Errors**:
+
 ```bash
 # Verify virtual environment
 source .venv/bin/activate
@@ -381,21 +418,25 @@ pip install -r requirements.txt
 ### Extension Issues
 
 **Extension Not Loading**:
+
 - Select `browser-extension` folder (not parent folder)
 - Check all files present
 - Look for errors in Extensions page
 
 **API Not Working**:
+
 - Verify backend running at http://localhost:8000
 - Check browser console for errors
 - Test API directly: http://localhost:8000/docs
 
 **Authentication Problems**:
+
 - Clear extension storage in Chrome
 - Check Supabase credentials in backend/.env
 - Verify popup blocker disabled
 
 **No Reply Button**:
+
 - Refresh page after installing extension
 - Ensure you're on supported platform (x.com)
 - Check if content script loaded in DevTools
@@ -403,6 +444,7 @@ pip install -r requirements.txt
 ### Dashboard Issues
 
 **Build Errors**:
+
 ```bash
 # Clear cache and reinstall
 rm -rf node_modules package-lock.json
@@ -410,6 +452,7 @@ npm install
 ```
 
 **API Connection**:
+
 - Verify backend URL in .env.local
 - Check CORS settings in backend
 - Confirm authentication tokens
@@ -419,12 +462,14 @@ npm install
 ## 🔐 Security & Privacy
 
 ### Privacy-First Design
+
 - ❌ **No content stored**: Original posts and replies never saved
 - ❌ **No personal data**: No names, locations, or sensitive information
 - ✅ **Analytics only**: Timestamps and service types for insights
 - ✅ **User control**: Optional authentication for advanced features
 
 ### Security Features
+
 - **Supabase JWT**: Secure token-based authentication
 - **Row-level Security**: Database access control
 - **Input Validation**: All API inputs sanitized
@@ -436,12 +481,14 @@ npm install
 ## 📈 What's Next
 
 ### Extension Ready ✅
+
 - Generate AI replies on X (Twitter)
 - Authentication for custom tones
 - Analytics tracking
 - Environment switching
 
 ### Backend Complete ✅
+
 - Full API with authentication
 - Privacy-first analytics storage
 - Custom tones management
@@ -449,12 +496,14 @@ npm install
 - Redis caching layer
 
 ### Dashboard Ready ✅
+
 - Usage statistics and charts
 - Settings management
 - Custom tone creation
 - Dark/light theme
 
 ### Production Deployment
+
 1. Deploy backend to your preferred platform
 2. Update extension environment config
 3. Build dashboard for static hosting
@@ -465,12 +514,14 @@ npm install
 ## 🤝 Support
 
 **Having Issues?**
+
 1. Check this installation guide
 2. Review error messages in browser console
 3. Verify all prerequisites installed
 4. Test each component individually
 
 **Get Help**:
+
 - Create GitHub issue with detailed description
 - Include error messages and setup details
 - Specify operating system and versions

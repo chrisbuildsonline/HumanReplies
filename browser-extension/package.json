@@ -1,0 +1,17 @@
+{
+  "name": "humanreplies-extension",
+  "version": "1.0.0",
+  "description": "AI-powered reply generation browser extension",
+  "main": "build.js",
+  "scripts": {
+    "build": "node build.js",
+    "build:production": "node build.js --production",
+    "dev": "node build.js",
+    "clean": "rm -rf dist",
+    "zip": "npm run build:production"
+  },
+  "devDependencies": {
+    "fs-extra": "^11.3.1",
+    "terser": "^5.44.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Build Extension on File Change",
+  "description": "Automatically builds the browser extension whenever files in the browser-extension folder are modified",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "browser-extension/**/*"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Files in the browser-extension folder have been modified. Please run the build process for the browser extension to ensure all changes are compiled and ready for use. Check the build.js file and run any necessary build commands."
+  }
+}

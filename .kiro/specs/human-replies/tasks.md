@@ -39,36 +39,8 @@
   - _Requirements: 2, 5_
 
 - [X] 7. Implement platform-specific content script integrations
-  - [ ] 7.1 Build LinkedIn integration module
-    - Create content script to detect LinkedIn reply opportunities
-    - Implement DOM injection for reply assistance UI on LinkedIn
-    - Add LinkedIn-specific context extraction and posting integration
+  - [X] 7.1 Build Context Integration
     - _Requirements: 2, 3_
-  
-  - [ ] 7.2 Build X (Twitter) integration module
-    - Create content script for X/Twitter with character limit handling
-    - Implement reply detection and UI injection for Twitter interface
-    - Add Twitter-specific threading and mention handling
-    - _Requirements: 2, 3_
-  
-  - [ ] 7.3 Build Facebook integration module
-    - Create content script to navigate Facebook's complex DOM structure
-    - Implement reply assistance for Facebook posts and comments
-    - Add Facebook-specific privacy and audience handling
-    - _Requirements: 2, 3_
-  
-  - [ ] 7.4 Build Instagram integration module
-    - Create content script for Instagram's mobile-first interface
-    - Implement comment reply assistance for Instagram posts
-    - Add Instagram-specific hashtag and mention handling
-    - _Requirements: 2, 3_
-  
-  - [ ] 7.5 Build email integration module
-    - Create content script for Gmail and Outlook web interfaces
-    - Implement email reply assistance with proper threading
-    - Add email-specific formatting and signature handling
-    - _Requirements: 2, 3_
-
 - [X] 8. Implement AI reply generation service
   - Create AI service integration for context analysis and reply generation
   - Implement framework prompt application system for maintaining user's writing style
@@ -76,7 +48,7 @@
   - Add platform-specific content adaptation for character limits and formatting
   - _Requirements: 3, 4, 6, 10_
 
-- [ ] 9. Build reply review and editing interface
+- [X] 9. Build reply review and editing interface
   - Create in-platform reply preview and editing interface
   - Implement one-click posting mechanism with user approval
   - Add reply optimization goal selection (engagement, relationship-building, lead generation)
