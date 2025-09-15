@@ -71,7 +71,7 @@ async def seed_default_tones():
         default_tones = [
             {
                 "name": "helpful",
-                "display_name": "👍 Helpful",
+                "display_name": "Helpful",
                 "description": "Supportive and constructive tone",
                 "is_preset": True,
                 "is_active": True,
@@ -79,7 +79,7 @@ async def seed_default_tones():
             },
             {
                 "name": "friendly",
-                "display_name": "😊 Friendly",
+                "display_name": "Friendly",
                 "description": "Warm and approachable tone",
                 "is_preset": True,
                 "is_active": True,
@@ -87,7 +87,7 @@ async def seed_default_tones():
             },
             {
                 "name": "professional",
-                "display_name": "💼 Professional",
+                "display_name": "Professional",
                 "description": "Formal and business-appropriate tone",
                 "is_preset": True,
                 "is_active": True,
@@ -95,7 +95,7 @@ async def seed_default_tones():
             },
             {
                 "name": "casual",
-                "display_name": "😎 Casual",
+                "display_name": "Casual",
                 "description": "Relaxed and informal tone",
                 "is_preset": True,
                 "is_active": True,
@@ -103,7 +103,7 @@ async def seed_default_tones():
             },
             {
                 "name": "encouraging",
-                "display_name": "🌟 Encouraging",
+                "display_name": "Encouraging",
                 "description": "Motivating and uplifting tone",
                 "is_preset": True,
                 "is_active": True,
@@ -111,7 +111,7 @@ async def seed_default_tones():
             },
             {
                 "name": "humorous",
-                "display_name": "😂 Humorous",
+                "display_name": "Humorous",
                 "description": "Light-hearted and funny tone",
                 "is_preset": True,
                 "is_active": True,
@@ -119,7 +119,7 @@ async def seed_default_tones():
             },
             {
                 "name": "informative",
-                "display_name": "📚 Informative",
+                "display_name": "Informative",
                 "description": "Educational and fact-based tone",
                 "is_preset": True,
                 "is_active": True,
@@ -127,7 +127,7 @@ async def seed_default_tones():
             },
             {
                 "name": "neutral",
-                "display_name": "⚖️ Neutral",
+                "display_name": "Neutral",
                 "description": "Balanced and objective tone",
                 "is_preset": True,
                 "is_active": True,

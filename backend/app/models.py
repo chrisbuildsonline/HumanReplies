@@ -196,8 +196,8 @@ class Tone(Base):
     __tablename__ = "tones"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False, index=True)  # e.g., "neutral", "joke"
-    display_name = Column(String, nullable=False)  # e.g., "👍 Neutral", "😂 Joke"
+    name = Column(String, nullable=False, index=True)  # e.g., "neutral"
+    display_name = Column(String, nullable=False)  # e.g., "Neutral"
     description = Column(String, nullable=True)  # Optional description
     is_preset = Column(Boolean, default=True)  # True for system presets, False for user custom
     is_active = Column(Boolean, default=True)

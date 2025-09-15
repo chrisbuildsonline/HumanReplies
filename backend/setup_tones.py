@@ -19,19 +19,19 @@ from app.models import Tone
 DEFAULT_TONES = [
     {
         "name": "neutral",
-        "display_name": "👍 Neutral",
+        "display_name": "Neutral",
         "description": "Balanced and helpful tone",
         "sort_order": 1
     },
     {
         "name": "funny",
-        "display_name": "😂 Humour",
+        "display_name": "Humour",
         "description": "Funny and light-hearted tone",
         "sort_order": 2
     },
     {
         "name": "confident",
-        "display_name": "💪 Confident",
+        "display_name": "Confident",
         "description": "Assertive and confident tone",
         "sort_order": 6
     }
