@@ -179,20 +179,26 @@ class HumanRepliesAPI {
           if (
             parsedResponse.variations &&
             Array.isArray(parsedResponse.variations) &&
-            parsedResponse.variations.every(v => typeof v === 'string')
+            parsedResponse.variations.every((v) => typeof v === "string")
           ) {
             variations = parsedResponse.variations;
             finalReply = variations[0]; // Use first variation as default reply
-          } else if (typeof parsedResponse === 'string') {
+          } else if (typeof parsedResponse === "string") {
             // If parsed response is a string, use it
             finalReply = parsedResponse;
           } else {
             // If it's a JSON object but not in expected format, extract text or use fallback
-            finalReply = parsedResponse.text || parsedResponse.reply || "I'd be happy to help with that.";
+            finalReply =
+              parsedResponse.text ||
+              parsedResponse.reply ||
+              "I'd be happy to help with that.";
           }
         } catch (e) {
           // If JSON parsing fails, check if rawReply looks like JSON before using it
-          if (rawReply.trim().startsWith('{') && rawReply.trim().endsWith('}')) {
+          if (
+            rawReply.trim().startsWith("{") &&
+            rawReply.trim().endsWith("}")
+          ) {
             // Looks like malformed JSON, use fallback message
             finalReply = "I'd be happy to help with that.";
           } else {

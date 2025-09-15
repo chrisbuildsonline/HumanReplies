@@ -771,7 +771,7 @@ function showSuccessBox(variations, remainingReplies) {
   successBox.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <span style="font-weight: 600; color: #000000;" id="humanreplies-header-text">Reply Suggestions</span>
-      <button id="humanreplies-close-btn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
+      <button id="humanreplies-close-btn" style="background: none; margin: 0; padding: 0; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
     </div>
     ${
       hasMultipleVariations
@@ -784,6 +784,7 @@ function showSuccessBox(variations, remainingReplies) {
           cursor: pointer;
           color: #666;
           padding: 4px;
+          margin: 0;
           ${
             currentVariationIndex === 0
               ? "opacity: 0.3; cursor: not-allowed;"
@@ -796,6 +797,7 @@ function showSuccessBox(variations, remainingReplies) {
         <button id="humanreplies-next-btn" style="
           background: none;
           border: none;
+          margin: 0;
           font-size: 16px;
           cursor: pointer;
           color: #666;
@@ -835,6 +837,7 @@ function showSuccessBox(variations, remainingReplies) {
         gap: 4px;
         font-size: 12px;
         padding: 6px 12px;
+        margin: 0;
       ">
         Copy
       </button>
@@ -996,7 +999,7 @@ function showErrorBox(errorMessage) {
   errorBox.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <span style="font-weight: 600; color: #f39c12;">⚠️ Generation Failed</span>
-      <button id="humanreplies-error-close-btn" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
+      <button id="humanreplies-error-close-btn" style="background: none; padding: 4px; margin: 0; border: none; font-size: 16px; cursor: pointer; color: #999;">×</button>
     </div>
     <p style="margin: 0; line-height: 1.4; color: #666;">
       ${errorMessage}
