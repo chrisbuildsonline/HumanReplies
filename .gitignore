@@ -25,6 +25,7 @@ extension/icons/*.png
 # API keys (backup - already in code)
 *.env
 .env*
+!.env.example
 
 .next
 

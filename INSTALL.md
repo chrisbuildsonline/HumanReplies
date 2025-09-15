@@ -96,6 +96,19 @@ python verify_setup.py
 python run.py
 ```
 
+## Supabase Setup
+
+1. **Create a free Supabase project**
+
+   - Go to [Supabase](https://supabase.com) and create a new project.
+   - Enable **Email authentication** and turn on **“Enable email confirmations.”**
+
+2. **Add your Supabase credentials to the project**  
+   Update the following files with your project’s **URL** and **anon key**:
+
+   - **Extension:** `browser-extension/config/environment.js`
+   - **Backend:** `backend/.env`
+
 ### Environment Variables
 
 Create `.env` file in `backend/` directory:

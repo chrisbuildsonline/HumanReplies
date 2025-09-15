@@ -9,9 +9,8 @@ class EnvironmentConfig {
         dashboardURL: "http://localhost:3000",
         debug: true,
         supabase: {
-          url: "https://anhcptguetscsoejzyed.supabase.co",
-          anonKey:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw",
+          url: "https://your-project.supabase.co",
+          anonKey: "your-anon-key",
         },
       },
       production: {
@@ -19,9 +18,8 @@ class EnvironmentConfig {
         dashboardURL: "https://humanreplies.com/dashboard",
         debug: false,
         supabase: {
-          url: "https://anhcptguetscsoejzyed.supabase.co",
-          anonKey:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuaGNwdGd1ZXRzY3NvZWp6eWVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzMTM4MTQsImV4cCI6MjA3MTg4OTgxNH0.LhZQib4k9BcMDZ_fM8pEyAe5m__fhuUxJdzJAKlb0kw",
+          url: "https://your-project.supabase.co",
+          anonKey: "your-anon-key",
         },
       },
     };
